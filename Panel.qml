@@ -260,23 +260,25 @@ Panel {
         }
 
         Row {
+          id: chartRow
           width: parent.width
           spacing: Style.space(6)
           readonly property real colWidth: Math.floor((width - (spacing * 6)) / 7)
-          readonly property real chartMax: Model.maxCount(root.usage.recentDays)
+          readonly property real chartMax: Math.max(1, Model.maxCount(root.usage.recentDays))
 
           Repeater {
             model: root.usage.recentDays || []
             delegate: Column {
-              width: parent.colWidth
+              width: chartRow.colWidth
               spacing: Style.space(4)
 
               Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: modelData.messageCount > 0 ? String(modelData.messageCount) : ""
-                color: root.dim
+                text: Number(modelData.messageCount || 0) > 0 ? String(modelData.messageCount) : ""
+                color: (index === 6) ? root.accent : root.dim
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption - 2
+                font.pixelSize: Style.font.caption - 1
+                font.bold: (index === 6)
               }
 
               Rectangle {
@@ -288,9 +290,12 @@ Panel {
                 Rectangle {
                   anchors.bottom: parent.bottom
                   width: parent.width
-                  height: Math.max(Style.space(2), parent.height * (Number(modelData.messageCount || 0) / parent.parent.chartMax))
+                  height: Number(modelData.messageCount || 0) > 0
+                    ? Math.max(Style.space(4), Math.round(parent.height * (Number(modelData.messageCount || 0) / chartRow.chartMax)))
+                    : 0
                   radius: parent.radius
-                  color: (index === 6) ? root.accent : Qt.darker(root.accent, 1.3)
+                  color: (index === 6) ? root.accent : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.6)
+                  visible: Number(modelData.messageCount || 0) > 0
                 }
               }
 
