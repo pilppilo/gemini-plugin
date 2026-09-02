@@ -45,11 +45,11 @@ omarchy plugin add ~/gemeni-plug --enable
 - **Press `Esc`**: Close panel.
 - **IPC Support**:
   ```bash
-  omarchy-shell pilppilo.gemini-usage open
-  omarchy-shell pilppilo.gemini-usage close
-  omarchy-shell pilppilo.gemini-usage toggle
-  omarchy-shell pilppilo.gemini-usage refresh
-  omarchy-shell pilppilo.gemini-usage status
+  omarchy-shell gemini-usage open
+  omarchy-shell gemini-usage close
+  omarchy-shell gemini-usage toggle
+  omarchy-shell gemini-usage refresh
+  omarchy-shell gemini-usage status
   ```
 
 ---
@@ -60,13 +60,13 @@ Settings can be customized directly or via `omarchy bar set`:
 
 ```bash
 # Set refresh interval (in seconds, default: 300)
-omarchy bar set pilppilo.gemini-usage refreshIntervalSec 180 --json
+omarchy bar set gemini-usage refreshIntervalSec 180 --json
 
 # Set rolling 5-hour session prompt allowance (default: 50)
-omarchy bar set pilppilo.gemini-usage sessionAllowance 60 --json
+omarchy bar set gemini-usage sessionAllowance 60 --json
 
 # Set weekly prompt allowance (default: 500)
-omarchy bar set pilppilo.gemini-usage weeklyAllowance 600 --json
+omarchy bar set gemini-usage weeklyAllowance 600 --json
 ```
 
 ---
@@ -84,7 +84,7 @@ omarchy bar set pilppilo.gemini-usage weeklyAllowance 600 --json
 To remove the plugin from Omarchy:
 
 ```bash
-omarchy plugin remove pilppilo.gemini-usage
+omarchy plugin remove gemini-usage
 ```
 
 ---

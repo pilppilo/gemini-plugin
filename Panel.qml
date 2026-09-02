@@ -7,8 +7,8 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "pilppilo.gemini-usage"
-  ipcTarget: "pilppilo.gemini-usage"
+  moduleName: "gemini-usage"
+  ipcTarget: "gemini-usage"
   manageIpc: false
 
   property Item anchorItem: null
