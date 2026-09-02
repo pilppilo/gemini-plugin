@@ -359,60 +359,108 @@ Panel {
 
         PanelSeparator { width: parent.width; foreground: root.foreground }
 
-        // ------------------ Recent Sessions ------------------
-        Text {
-          text: "RECENT SESSIONS"
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          visible: Boolean(root.usage && root.usage.recentSessions && root.usage.recentSessions.length > 0)
+        // ------------------ Recent Finished Job ------------------
+        RowLayout {
+          width: parent.width
+          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
+          spacing: Style.space(6)
+
+          Text {
+            text: "RECENT FINISHED JOB"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          Item { Layout.fillWidth: true }
+
+          // Status Badge
+          Rectangle {
+            implicitHeight: Style.space(16)
+            implicitWidth: statusText.implicitWidth + Style.space(12)
+            color: Style.selectedFillFor(root.foreground, root.accent)
+            radius: Style.space(8)
+
+            Text {
+              id: statusText
+              anchors.centerIn: parent
+              text: "✓ " + (root.usage && root.usage.recentJob ? root.usage.recentJob.status : "Completed")
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption - 2
+              font.bold: true
+            }
+          }
+
+          Text {
+            text: root.usage && root.usage.recentJob ? root.usage.recentJob.timeAgo : ""
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption - 1
+          }
         }
 
-        Repeater {
-          model: root.usage.recentSessions || []
-          delegate: Rectangle {
-            width: parent.width
-            implicitHeight: sessionRow.implicitHeight + Style.space(10)
-            color: Style.selectedFillFor(root.foreground, root.accent)
-            opacity: 0.8
-            radius: Style.space(4)
+        Rectangle {
+          width: parent.width
+          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
+          implicitHeight: jobCol.implicitHeight + Style.space(12)
+          color: Style.selectedFillFor(root.foreground, root.accent)
+          opacity: 0.85
+          radius: Style.space(6)
 
+          ColumnLayout {
+            id: jobCol
+            anchors.fill: parent
+            anchors.margins: Style.space(8)
+            spacing: Style.space(5)
+
+            // Prompt Title
+            Text {
+              text: root.usage && root.usage.recentJob ? root.usage.recentJob.title : ""
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
+              elide: Text.ElideRight
+              Layout.fillWidth: true
+            }
+
+            // Summary / Result preview
+            Text {
+              text: root.usage && root.usage.recentJob && root.usage.recentJob.summary ? ("“" + root.usage.recentJob.summary + "”") : ""
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption - 1
+              font.italic: true
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
+              elide: Text.ElideRight
+              Layout.fillWidth: true
+              visible: Boolean(text.length > 0)
+            }
+
+            // Bottom metadata row: Workspace pill & steps/tools
             RowLayout {
-              id: sessionRow
-              anchors.fill: parent
-              anchors.margins: Style.space(6)
+              Layout.fillWidth: true
               spacing: Style.space(8)
 
-              ColumnLayout {
+              Text {
+                text: "📁 " + (root.usage && root.usage.recentJob ? root.usage.recentJob.workspace : "~")
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption - 1
+                elide: Text.ElideMiddle
                 Layout.fillWidth: true
-                spacing: Style.space(2)
-
-                Text {
-                  text: modelData.title
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  elide: Text.ElideRight
-                  Layout.fillWidth: true
-                }
-
-                Text {
-                  text: modelData.workspace ? ("📁 " + modelData.workspace) : "📁 Workspace"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption - 1
-                  elide: Text.ElideMiddle
-                  Layout.fillWidth: true
-                }
               }
 
               Text {
-                text: modelData.steps + " steps"
+                text: root.usage && root.usage.recentJob ? (root.usage.recentJob.steps + " steps · " + root.usage.recentJob.toolCalls + " tools") : ""
                 color: root.dim
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.caption - 1
               }
             }
           }

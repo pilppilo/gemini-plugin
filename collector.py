@@ -9,6 +9,7 @@ Also updates ~/.local/state/omarchy/agents/usage/gemini.json for the built-in Ag
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -196,6 +197,152 @@ def parse_sessions_db(db_file):
     return sessions
 
 
+def clean_preview(text, max_len=160):
+    if not text:
+        return ""
+    text = re.sub(r"<ADDITIONAL_METADATA>[\s\S]*?</ADDITIONAL_METADATA>", "", text)
+    text = re.sub(r"<USER_SETTINGS_CHANGE>[\s\S]*?</USER_SETTINGS_CHANGE>", "", text)
+    text = re.sub(r"<SYSTEM_MESSAGE>[\s\S]*?</SYSTEM_MESSAGE>", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"^>.*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.replace("**", "").replace("__", "").replace("`", "").replace("#", "")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    cleaned = " ".join(lines)
+    if len(cleaned) > max_len:
+        return cleaned[:max_len - 3].strip() + "..."
+    return cleaned
+
+
+def parse_recent_finished_job(paths):
+    brain_dir = paths["antigravity_cli"] / "brain"
+    history_file = paths["history_file"]
+
+    histories = []
+    if history_file.exists():
+        try:
+            with open(history_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            histories.append(json.loads(line))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    transcripts = []
+    if brain_dir.exists():
+        for d in brain_dir.iterdir():
+            if not d.is_dir():
+                continue
+            t_file = d / ".system_generated" / "logs" / "transcript.jsonl"
+            if t_file.exists():
+                transcripts.append((t_file.stat().st_mtime, d.name, t_file))
+        transcripts.sort(key=lambda x: x[0], reverse=True)
+
+    for mtime, cid, t_file in transcripts:
+        try:
+            with open(t_file, "r", encoding="utf-8") as f:
+                lines = [json.loads(l) for l in f if l.strip()]
+        except Exception:
+            continue
+
+        if not lines:
+            continue
+
+        last_response_idx = -1
+        for i in range(len(lines) - 1, -1, -1):
+            step = lines[i]
+            if step.get("type") == "PLANNER_RESPONSE" and step.get("content") and step.get("status") == "DONE":
+                last_response_idx = i
+                break
+
+        if last_response_idx == -1:
+            continue
+
+        finished_step = lines[last_response_idx]
+        finish_time_str = finished_step.get("created_at")
+        result_content = finished_step.get("content", "")
+
+        prompt = ""
+        prompt_step_idx = -1
+        for i in range(last_response_idx - 1, -1, -1):
+            if lines[i].get("type") == "USER_INPUT":
+                prompt = lines[i].get("content", "")
+                prompt_step_idx = i
+                break
+
+        turn_slice = lines[prompt_step_idx:last_response_idx + 1] if prompt_step_idx >= 0 else lines[:last_response_idx + 1]
+        turn_steps = len(turn_slice)
+        turn_tools = sum(len(s.get("tool_calls", [])) for s in turn_slice if s.get("tool_calls"))
+
+        workspace = ""
+        for s in turn_slice:
+            if s.get("tool_calls"):
+                for tc in s["tool_calls"]:
+                    args = tc.get("args") or {}
+                    if isinstance(args, dict) and "Cwd" in args:
+                        workspace = str(args["Cwd"]).strip("\"'\n ")
+                        break
+            if workspace:
+                break
+
+        if not workspace:
+            for h in reversed(histories):
+                if h.get("conversationId") == cid and h.get("workspace"):
+                    workspace = h.get("workspace")
+                    break
+
+        finish_dt = None
+        if finish_time_str:
+            try:
+                finish_dt = datetime.fromisoformat(finish_time_str.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        if not finish_dt:
+            finish_dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+
+        diff_sec = max(0, int((datetime.now(timezone.utc) - finish_dt).total_seconds()))
+        if diff_sec < 60:
+            time_ago = "Just now"
+        elif diff_sec < 3600:
+            time_ago = f"{diff_sec // 60}m ago"
+        elif diff_sec < 86400:
+            time_ago = f"{diff_sec // 3600}h ago"
+        else:
+            time_ago = f"{diff_sec // 86400}d ago"
+
+        local_time_str = finish_dt.astimezone().strftime("%H:%M")
+
+        clean_prompt_text = clean_preview(prompt, 110)
+        if not clean_prompt_text or clean_prompt_text.isdigit() or len(clean_prompt_text) < 4:
+            for h in reversed(histories):
+                if h.get("conversationId") == cid:
+                    d = clean_preview(h.get("display", ""), 110)
+                    if d and not d.isdigit() and len(d) > len(clean_prompt_text):
+                        clean_prompt_text = d
+                        break
+
+        return {
+            "id": cid[:8],
+            "fullId": cid,
+            "title": clean_prompt_text or "Antigravity Task",
+            "workspace": sanitize_path(workspace),
+            "status": "Completed",
+            "steps": turn_steps,
+            "totalSteps": len(lines),
+            "toolCalls": turn_tools,
+            "timeAgo": time_ago,
+            "finishTime": local_time_str,
+            "summary": clean_preview(result_content, 180)
+        }
+
+    return None
+
+
+
 def get_model_and_tier(paths):
     tier_label = "Gemini Code Assist"
     model_name = "Gemini 3.8 Flash (Medium)"
@@ -288,6 +435,7 @@ def main():
     meta = get_model_and_tier(paths)
     stats = parse_history(paths["history_file"], args.session_allowance, args.weekly_allowance)
     recent_sessions = parse_sessions_db(paths["db_file"]) if not args.limits_only else []
+    recent_job = parse_recent_finished_job(paths) if not args.limits_only else None
 
     today_tokens = stats["today_prompts"] * 2500
     total_tokens = stats["total_prompts"] * 2500
@@ -326,6 +474,7 @@ def main():
         "recentDays": stats["recent_days"],
         "modelUsageList": [{"name": meta["model_name"], "tokens": today_tokens}],
         "recentSessions": recent_sessions,
+        "recentJob": recent_job,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
         "statusText": "" if meta["ready"] else "Waiting for auth"
     }
