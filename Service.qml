@@ -91,7 +91,7 @@ Item {
 
       if (exitCode !== 0) {
         root.lastError = errText || "Collector exited with code " + exitCode
-        console.warn("pilppilo.gemini-usage collector error:", root.lastError)
+        console.warn("gemini-usage collector error:", root.lastError)
         return
       }
 
@@ -102,7 +102,7 @@ Item {
           root.lastUpdated = new Date()
         } catch (e) {
           root.lastError = "Failed to parse collector JSON: " + e.message
-          console.warn("pilppilo.gemini-usage JSON parse error:", e)
+          console.warn("gemini-usage JSON parse error:", e)
         }
       }
     }

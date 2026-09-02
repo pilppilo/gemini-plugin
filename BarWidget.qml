@@ -8,7 +8,7 @@ import "Model.js" as Model
 
 BarWidget {
   id: root
-  moduleName: "pilppilo.gemini-usage"
+  moduleName: "gemini-usage"
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
