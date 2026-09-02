@@ -16,7 +16,7 @@ An Omarchy bar widget and details panel for **Google Gemini** and **Antigravity 
 - **5-Hour Rolling Session Meter**: Visual gauge, prompt count (e.g. `14 / 50 prompts`), remaining allowance, and countdown to window reset.
 - **7-Day Weekly Meter & Pace**: Visual gauge, weekly allowance, reset timer, and pace status (`On pace` vs `Behind pace`).
 - **7-Day Prompt History**: Responsive vertical bar chart tracking daily activity across the last 7 days, scaling automatically to your busiest day.
-- **Recent Sessions**: Active Antigravity project workspaces, prompt counts, and conversation titles.
+- **Recent Finished Job**: Dedicated card tracking the latest completed Antigravity task with status badge, execution timestamp, task prompt, target workspace, total steps & tool calls, and result summary.
 
 ### Built-in `omarchy.agents` Integration
 Every refresh automatically syncs an authoritative `gemini.json` record into `~/.local/state/omarchy/agents/usage/`. If you also use Omarchy's built-in `omarchy.agents` panel, a **Gemini** tab will automatically appear alongside Claude and Codex!
