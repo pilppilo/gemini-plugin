@@ -49,6 +49,14 @@ Item {
     var v = parseInt(settings ? settings.weeklyAllowance : 500, 10)
     return isNaN(v) ? 500 : Math.max(50, v)
   }
+  readonly property int claudeSessionAllowance: {
+    var v = parseInt(settings ? settings.claudeSessionAllowance : 50, 10)
+    return isNaN(v) ? 50 : Math.max(10, v)
+  }
+  readonly property int claudeWeeklyAllowance: {
+    var v = parseInt(settings ? settings.claudeWeeklyAllowance : 500, 10)
+    return isNaN(v) ? 500 : Math.max(50, v)
+  }
 
   function refresh() {
     if (refreshing || collectorProcess.running) return
@@ -57,6 +65,8 @@ Item {
     var cmd = ["python3", root.pluginDir + "/collector.py"]
     cmd.push("--session-allowance", String(root.sessionAllowance))
     cmd.push("--weekly-allowance", String(root.weeklyAllowance))
+    cmd.push("--claude-session-allowance", String(root.claudeSessionAllowance))
+    cmd.push("--claude-weekly-allowance", String(root.claudeWeeklyAllowance))
     collectorProcess.command = cmd
     collectorProcess.running = true
   }
