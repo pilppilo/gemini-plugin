@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
 Gemini & Antigravity Usage Collector for Omarchy.
-Extracts usage statistics, rate limits, prompts, sessions, and pace from
-Antigravity and Gemini CLI stores, and outputs JSON for the Omarchy Bar Widget & Panel.
-Also updates ~/.local/state/omarchy/agents/usage/gemini.json for the built-in Agents panel.
+Extracts live authoritative quota and subscription tier from Antigravity's local language server,
+with automatic fallback to local history and cached states.
+Outputs JSON for the Omarchy Bar Widget & Panel and syncs ~/.local/state/omarchy/agents/usage/gemini.json.
 """
 
 import argparse
 import json
 import os
+import re
+import socket
 import sqlite3
 import sys
 import time
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,7 +32,134 @@ def get_paths():
         "settings_file": home / ".gemini" / "antigravity-cli" / "settings.json",
         "oauth_creds": home / ".gemini" / "oauth_creds.json",
         "antigravity_token": home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token",
+        "cache_file": home / ".cache" / "omarchy" / "antigravity-live-quota.json",
         "state_dir": Path(os.environ.get("XDG_STATE_HOME", str(home / ".local/state"))) / "omarchy" / "agents" / "usage"
+    }
+
+
+def find_cli_log(antigravity_cli_dir):
+    cli_log = antigravity_cli_dir / "cli.log"
+    if cli_log.exists():
+        return cli_log
+    log_dir = antigravity_cli_dir / "log"
+    if log_dir.exists():
+        try:
+            logs = sorted(log_dir.glob("cli-*.log"), key=os.path.getmtime, reverse=True)
+            if logs:
+                return logs[0]
+        except Exception:
+            pass
+    return None
+
+
+def find_language_server_port(antigravity_cli_dir):
+    log_file = find_cli_log(antigravity_cli_dir)
+    if not log_file or not log_file.exists():
+        return None
+    try:
+        candidates = []
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                m = re.search(r"listening on random port at (\d+) for HTTP\b", line)
+                if m:
+                    candidates.append(int(m.group(1)))
+
+        for candidate in reversed(candidates):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.2)
+                if s.connect_ex(("127.0.0.1", candidate)) == 0:
+                    s.close()
+                    return candidate
+                s.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None
+
+
+def fetch_live_quota(port):
+    if not port:
+        return None, None
+    quota_data = None
+    tier_data = None
+    try:
+        url_q = f"http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary"
+        req_q = urllib.request.Request(url_q, headers={"Content-Type": "application/json"}, data=b"{}")
+        with urllib.request.urlopen(req_q, timeout=2) as resp:
+            quota_data = json.loads(resp.read().decode())
+    except Exception:
+        pass
+
+    try:
+        url_t = f"http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetLoadCodeAssist"
+        req_t = urllib.request.Request(url_t, headers={"Content-Type": "application/json"}, data=b"{}")
+        with urllib.request.urlopen(req_t, timeout=2) as resp:
+            tier_data = json.loads(resp.read().decode())
+    except Exception:
+        pass
+
+    return quota_data, tier_data
+
+
+def parse_live_data(quota_data, tier_data):
+    if not quota_data:
+        return None
+
+    tier_label = "Google AI Pro"
+    if tier_data:
+        t_resp = tier_data.get("response", {})
+        paid = t_resp.get("paidTier", {})
+        current = t_resp.get("currentTier", {})
+        if paid.get("name"):
+            tier_label = paid.get("name")
+        elif current.get("name"):
+            tier_label = current.get("name")
+
+    session_info = None
+    weekly_info = None
+
+    groups = quota_data.get("response", {}).get("groups", [])
+    now_ts = time.time()
+
+    for g in groups:
+        if "gemini" in g.get("displayName", "").lower() or "gemini" in g.get("description", "").lower():
+            for b in g.get("buckets", []):
+                window = b.get("window")
+                rem_frac = b.get("remainingFraction", 1.0)
+                used_pct = max(0.0, min(1.0, round(1.0 - rem_frac, 4)))
+                reset_time = b.get("resetTime", "")
+
+                rem_sec = 0
+                if reset_time:
+                    try:
+                        clean_reset = reset_time.replace("Z", "+00:00")
+                        dt_reset = datetime.fromisoformat(clean_reset)
+                        rem_sec = max(0, int(dt_reset.timestamp() - now_ts))
+                    except Exception:
+                        pass
+
+                if window == "5h":
+                    session_info = {
+                        "percent": used_pct,
+                        "resetsAt": reset_time,
+                        "resetRemainingSeconds": rem_sec
+                    }
+                elif window == "weekly":
+                    weekly_info = {
+                        "percent": used_pct,
+                        "resetsAt": reset_time,
+                        "resetRemainingSeconds": rem_sec
+                    }
+
+    if not session_info and not weekly_info:
+        return None
+
+    return {
+        "tier_label": tier_label,
+        "session": session_info,
+        "weekly": weekly_info
     }
 
 
@@ -121,7 +251,6 @@ def parse_history(history_file, session_allowance, weekly_allowance):
     session_percent = min(1.0, round(session_prompts / float(max(1, session_allowance)), 4))
     weekly_percent = min(1.0, round(weekly_prompts / float(max(1, weekly_allowance)), 4))
 
-    # Pace calculation: 7-day window elapsed pace
     if oldest_in_7d:
         elapsed_week_ratio = min(1.0, (now_ts_ms - oldest_in_7d) / float(seven_days_ms))
     else:
@@ -150,15 +279,12 @@ def parse_history(history_file, session_allowance, weekly_allowance):
     }
 
 
-
 def sanitize_path(path_str):
     if not path_str:
         return ""
-    import re
-    # Strip any file:// prefix
     p = path_str.replace("file://", "")
-    # Replace /home/<any_user> with ~
     return re.sub(r"^/home/[^/]+", "~", p)
+
 
 def parse_sessions_db(db_file):
     sessions = []
@@ -197,7 +323,7 @@ def parse_sessions_db(db_file):
 
 
 def get_model_and_tier(paths):
-    tier_label = "Gemini Code Assist"
+    tier_label = "Google AI Pro"
     model_name = "Gemini 3.8 Flash (Medium)"
     ready = False
 
@@ -289,6 +415,66 @@ def main():
     stats = parse_history(paths["history_file"], args.session_allowance, args.weekly_allowance)
     recent_sessions = parse_sessions_db(paths["db_file"]) if not args.limits_only else []
 
+    # Attempt to query live authoritative data from local Antigravity Language Server
+    live_quota = None
+    port = find_language_server_port(paths["antigravity_cli"])
+    if port:
+        q_raw, t_raw = fetch_live_quota(port)
+        if q_raw:
+            live_quota = parse_live_data(q_raw, t_raw)
+            if live_quota:
+                try:
+                    paths["cache_file"].parent.mkdir(parents=True, exist_ok=True)
+                    with open(paths["cache_file"], "w", encoding="utf-8") as f:
+                        json.dump(live_quota, f)
+                except Exception:
+                    pass
+
+    # If live query failed, check cache
+    if not live_quota and paths["cache_file"].exists():
+        try:
+            with open(paths["cache_file"], "r", encoding="utf-8") as f:
+                live_quota = json.load(f)
+        except Exception:
+            pass
+
+    # Merge live data when available
+    session_used = stats["session_prompts"]
+    session_allowance = args.session_allowance
+    session_percent = stats["session_percent"]
+    session_reset_iso = stats["reset_5h_iso"]
+    session_reset_sec = stats["reset_5h_seconds"]
+
+    weekly_used = stats["weekly_prompts"]
+    weekly_allowance = args.weekly_allowance
+    weekly_percent = stats["weekly_percent"]
+    weekly_reset_iso = stats["reset_7d_iso"]
+    weekly_reset_sec = stats["reset_7d_seconds"]
+
+    if live_quota:
+        if live_quota.get("tier_label"):
+            meta["tier_label"] = live_quota["tier_label"]
+
+        if live_quota.get("session"):
+            s = live_quota["session"]
+            session_percent = s["percent"]
+            session_reset_iso = s["resetsAt"]
+            session_reset_sec = s["resetRemainingSeconds"]
+            if session_percent > 0:
+                session_allowance = max(session_used, int(round(session_used / session_percent)))
+            else:
+                session_allowance = max(session_allowance, 100)
+
+        if live_quota.get("weekly"):
+            w = live_quota["weekly"]
+            weekly_percent = w["percent"]
+            weekly_reset_iso = w["resetsAt"]
+            weekly_reset_sec = w["resetRemainingSeconds"]
+            if weekly_percent > 0:
+                weekly_allowance = max(weekly_used, int(round(weekly_used / weekly_percent)))
+            else:
+                weekly_allowance = max(weekly_allowance, 1500)
+
     today_tokens = stats["today_prompts"] * 2500
     total_tokens = stats["total_prompts"] * 2500
 
@@ -309,18 +495,18 @@ def main():
         "activeDates": stats["active_dates"],
         "behindPace": stats["behind_pace"],
         "session": {
-            "used": stats["session_prompts"],
-            "allowance": args.session_allowance,
-            "percent": stats["session_percent"],
-            "resetsAt": stats["reset_5h_iso"],
-            "resetRemainingSeconds": stats["reset_5h_seconds"]
+            "used": session_used,
+            "allowance": session_allowance,
+            "percent": session_percent,
+            "resetsAt": session_reset_iso,
+            "resetRemainingSeconds": session_reset_sec
         },
         "weekly": {
-            "used": stats["weekly_prompts"],
-            "allowance": args.weekly_allowance,
-            "percent": stats["weekly_percent"],
-            "resetsAt": stats["reset_7d_iso"],
-            "resetRemainingSeconds": stats["reset_7d_seconds"],
+            "used": weekly_used,
+            "allowance": weekly_allowance,
+            "percent": weekly_percent,
+            "resetsAt": weekly_reset_iso,
+            "resetRemainingSeconds": weekly_reset_sec,
             "behindPace": stats["behind_pace"]
         },
         "recentDays": stats["recent_days"],
