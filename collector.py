@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gemini & Antigravity Usage Collector for Omarchy.
-Extracts usage statistics, rate limits, prompts, and pace for two categories:
+Extracts usage statistics, rate limits, prompts, and completed jobs for two categories:
   1) Gemini (Google Gemini models)
   2) Claude / Others (Claude Opus/Sonnet, GPT-OSS, and other third-party models)
 Outputs JSON for the Omarchy Bar Widget & Details Panel.
@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,7 @@ def get_paths():
         "gemini_dir": home / ".gemini",
         "antigravity_cli": home / ".gemini" / "antigravity-cli",
         "history_file": home / ".gemini" / "antigravity-cli" / "history.jsonl",
+        "db_file": home / ".gemini" / "antigravity-cli" / "conversation_summaries.db",
         "settings_file": home / ".gemini" / "antigravity-cli" / "settings.json",
         "oauth_creds": home / ".gemini" / "oauth_creds.json",
         "antigravity_token": home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token",
@@ -51,6 +53,73 @@ def get_category(model_name):
     if "gemini" in low:
         return "gemini"
     return "claude_others"
+
+
+def sanitize_path(path_str):
+    if not path_str:
+        return "~"
+    p = path_str.replace("file://", "")
+    return re.sub(r"^/home/[^/]+", "~", p)
+
+
+def parse_recent_finished_job(db_file):
+    if not db_file.exists():
+        return None
+
+    try:
+        conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute(
+            "SELECT conversation_id, title, preview, step_count, last_modified_time, workspace_uris "
+            "FROM conversation_summaries WHERE killed = 0 "
+            "ORDER BY last_modified_time DESC LIMIT 1"
+        )
+        row = c.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+
+        cid, title, preview, steps, mtime, uris = row
+        ws = "~"
+        try:
+            u = json.loads(uris)
+            if u and isinstance(u, list):
+                ws = sanitize_path(u[0])
+            elif uris:
+                ws = sanitize_path(str(uris))
+        except Exception:
+            pass
+
+        time_ago = "Recently"
+        if mtime:
+            try:
+                dt = datetime.fromisoformat(str(mtime).replace("Z", "+00:00"))
+                diff_sec = max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+                if diff_sec < 60:
+                    time_ago = "Just now"
+                elif diff_sec < 3600:
+                    time_ago = f"{diff_sec // 60}m ago"
+                elif diff_sec < 86400:
+                    time_ago = f"{diff_sec // 3600}h ago"
+                else:
+                    time_ago = f"{diff_sec // 86400}d ago"
+            except Exception:
+                pass
+
+        return {
+            "id": str(cid or "")[:8],
+            "fullId": str(cid or ""),
+            "title": (title or "Completed Task").strip(),
+            "workspace": ws,
+            "status": "Completed",
+            "steps": steps or 0,
+            "timeAgo": time_ago,
+            "summary": (preview or "").strip()[:140]
+        }
+    except Exception as e:
+        sys.stderr.write(f"Warning: could not query recent job from db: {e}\n")
+        return None
 
 
 def build_conversation_timelines(paths):
@@ -526,6 +595,7 @@ def main():
     categories = parse_history_by_category(paths, allowances, meta["model_name"])
     active_category = get_category(meta["model_name"])
     active_cat_data = categories.get(active_category) or categories["gemini"]
+    recent_job = parse_recent_finished_job(paths["db_file"]) if not args.limits_only else None
 
     result = {
         "id": "gemini",
@@ -550,6 +620,7 @@ def main():
         "weekly": active_cat_data["weekly"],
         "modelUsageList": active_cat_data["modelUsageList"],
 
+        "recentJob": recent_job,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
         "statusText": "" if meta["ready"] else "Waiting for auth"
     }
