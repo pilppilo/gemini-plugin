@@ -128,7 +128,9 @@ Panel {
             }
             Item { Layout.fillWidth: true }
             Text {
-              text: (root.usage.session ? root.usage.session.used : 0) + " / " + (root.usage.session ? root.usage.session.allowance : 50) + " prompts"
+              text: (root.usage.session && root.usage.session.allowance > 0)
+                ? (root.usage.session.used + " / " + root.usage.session.allowance + " prompts")
+                : ((root.usage.session ? root.usage.session.used : 0) + " prompts")
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -190,7 +192,9 @@ Panel {
             }
             Item { Layout.fillWidth: true }
             Text {
-              text: (root.usage.weekly ? root.usage.weekly.used : 0) + " / " + (root.usage.weekly ? root.usage.weekly.allowance : 500) + " prompts"
+              text: (root.usage.weekly && root.usage.weekly.allowance > 0)
+                ? (root.usage.weekly.used + " / " + root.usage.weekly.allowance + " prompts")
+                : ((root.usage.weekly ? root.usage.weekly.used : 0) + " prompts")
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

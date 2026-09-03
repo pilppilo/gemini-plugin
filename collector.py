@@ -460,20 +460,14 @@ def main():
             session_percent = s["percent"]
             session_reset_iso = s["resetsAt"]
             session_reset_sec = s["resetRemainingSeconds"]
-            if session_percent > 0:
-                session_allowance = max(session_used, int(round(session_used / session_percent)))
-            else:
-                session_allowance = max(session_allowance, 100)
+            session_allowance = 0
 
         if live_quota.get("weekly"):
             w = live_quota["weekly"]
             weekly_percent = w["percent"]
             weekly_reset_iso = w["resetsAt"]
             weekly_reset_sec = w["resetRemainingSeconds"]
-            if weekly_percent > 0:
-                weekly_allowance = max(weekly_used, int(round(weekly_used / weekly_percent)))
-            else:
-                weekly_allowance = max(weekly_allowance, 1500)
+            weekly_allowance = 0
 
     today_tokens = stats["today_prompts"] * 2500
     total_tokens = stats["total_prompts"] * 2500
