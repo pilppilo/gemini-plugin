@@ -345,7 +345,7 @@ Panel {
           }
           Item { Layout.fillWidth: true }
           Text {
-            text: "Today: " + (root.currentCategoryData.todayPrompts || 0) + " prompts (" + Model.formatCompactNumber(root.currentCategoryData.todayTotalTokens || 0) + " tokens)"
+            text: "This Week: " + (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.used : 0) + " prompts (" + Model.formatCompactNumber(root.currentCategoryData.weeklyTotalTokens || 0) + " tokens)"
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -356,7 +356,7 @@ Panel {
         Repeater {
           model: (root.currentCategoryData && root.currentCategoryData.modelUsageList && root.currentCategoryData.modelUsageList.length > 0)
             ? root.currentCategoryData.modelUsageList
-            : [{ name: root.currentCategoryData.activeModel || "None", tokens: root.currentCategoryData.todayTotalTokens || 0 }]
+            : [{ name: root.currentCategoryData.activeModel || "None", tokens: root.currentCategoryData.todayTotalTokens || 0, prompts: root.currentCategoryData.todayPrompts || 0 }]
           delegate: Rectangle {
             width: parent.width
             height: Style.space(28)
@@ -378,7 +378,7 @@ Panel {
               }
 
               Text {
-                text: Model.formatCompactNumber(modelData.tokens) + " tokens"
+                text: (modelData.prompts ? (modelData.prompts + " prompts · ") : "") + Model.formatCompactNumber(modelData.tokens) + " tokens"
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -508,7 +508,7 @@ Panel {
           }
           Item { Layout.fillWidth: true }
           Text {
-            text: "[1] Gemini · [2] Claude · [R] Refresh"
+            text: "[R] Refresh · [Esc] Close"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
