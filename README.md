@@ -12,11 +12,14 @@ An Omarchy bar widget and details panel for **Google Gemini** and **Antigravity 
 - **Urgent / Behind Pace Indicator**: Turns warning/urgent color when quota consumption is tracking ahead of expected time pace or nearing limits (>85%).
 
 ### In the Details Panel (Left Click)
-- **Hero Card**: Gemini / Antigravity mark, active model (e.g. `Gemini 3.8 Flash (Medium)`), account tier (`Gemini Code Assist` / `Standard Tier`), and signed-in Google account.
-- **5-Hour Rolling Session Meter**: Visual gauge, prompt count (e.g. `14 / 50 prompts`), remaining allowance, and countdown to window reset.
-- **7-Day Weekly Meter & Pace**: Visual gauge, weekly allowance, reset timer, and pace status (`On pace` vs `Behind pace`).
+- **Hero Card**: Gemini / Antigravity mark, active model (e.g. `Gemini 3.8 Flash (Medium)`), **live subscription tier** (e.g. `Google AI Pro`, `Gemini Code Assist`, `Standard Tier`), and status.
+- **5-Hour Rolling Session Meter**: Visual gauge, prompt count, remaining allowance, and live server countdown to window reset.
+- **7-Day Weekly Meter & Pace**: Visual gauge, weekly allowance, live server reset timer, and pace status (`On pace` vs `Behind pace`).
 - **7-Day Prompt History**: Responsive vertical bar chart tracking daily activity across the last 7 days, scaling automatically to your busiest day.
 - **Recent Sessions**: Active Antigravity project workspaces, prompt counts, and conversation titles.
+
+### Live Authoritative Quota & Tier Detection
+The collector automatically discovers Antigravity's local Language Server and queries `RetrieveUserQuotaSummary` and `GetLoadCodeAssist`. This dynamically extracts real-time rate limits, exact reset timestamps, and your exact subscription tier (such as `Google AI Pro`) directly from server responses without requiring manual API keys or hardcoded allowances. If Antigravity is not running or is offline, it seamlessly falls back to cached stats and local activity scanning (`history.jsonl`).
 
 ### Built-in `omarchy.agents` Integration
 Every refresh automatically syncs an authoritative `gemini.json` record into `~/.local/state/omarchy/agents/usage/`. If you also use Omarchy's built-in `omarchy.agents` panel, a **Gemini** tab will automatically appear alongside Claude and Codex!
