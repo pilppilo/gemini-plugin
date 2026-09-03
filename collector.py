@@ -461,6 +461,15 @@ def publish_omarchy_state(paths, payload):
         output_tokens = payload.get("outputTokens", 0)
         input_tokens = max(0, payload["todayTotalTokens"] - output_tokens)
 
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        token_recent_days = []
+        for d in payload.get("recentDays", []):
+            date_str = d["date"]
+            if date_str == today_str:
+                token_recent_days.append({"date": date_str, "messageCount": payload["todayTotalTokens"]})
+            else:
+                token_recent_days.append({"date": date_str, "messageCount": 0})
+
         gemini_state = {
             "schemaVersion": 1,
             "id": "gemini",
@@ -474,7 +483,7 @@ def publish_omarchy_state(paths, payload):
             "todayTokensByModel": {
                 payload["model"]: payload["todayTotalTokens"]
             },
-            "recentDays": payload["recentDays"],
+            "recentDays": token_recent_days,
             "totalPrompts": payload["totalPrompts"],
             "totalSessions": payload["totalSessions"],
             "activeDays": payload["activeDays"],
