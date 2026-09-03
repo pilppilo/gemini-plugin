@@ -40,6 +40,14 @@ def get_paths():
     }
 
 
+def canonical_model(name):
+    if not name:
+        return "Unknown"
+    # Strip any parenthetical variant/effort e.g. (High), (Medium), (Thinking)
+    cleaned = re.sub(r"\s*\([^)]*\)", "", name).strip()
+    return cleaned or name.strip()
+
+
 def get_category(model_name):
     if not model_name:
         return "gemini"
@@ -73,7 +81,7 @@ def build_conversation_timelines(paths):
                         if not m:
                             m = re.search(r"Model Selection\` from .*? to ([A-Za-z0-9\s\.\(\)\-]+?)(?:\.\s|\n|$)", line)
                         if m:
-                            model_name = m.group(1).strip()
+                            model_name = canonical_model(m.group(1).strip())
                             try:
                                 step = json.loads(line)
                                 created = step.get("created_at")
@@ -140,6 +148,7 @@ def parse_history_by_category(paths, allowances, default_model):
     recent_dates = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
 
     cid_timelines = build_conversation_timelines(paths)
+    canon_default = canonical_model(default_model)
 
     raw_buckets = {
         "gemini": init_category_bucket(),
@@ -161,7 +170,8 @@ def parse_history_by_category(paths, allowances, default_model):
                         cid = entry.get("conversationId")
                         ts = entry.get("timestamp", 0)
 
-                        model = resolve_model_at_ts(cid_timelines, cid, ts, default_model)
+                        model = resolve_model_at_ts(cid_timelines, cid, ts, canon_default)
+                        model = canonical_model(model)
                         cat = get_category(model)
                         b = raw_buckets[cat]
 
@@ -185,7 +195,7 @@ def parse_history_by_category(paths, allowances, default_model):
                             if b["oldest_in_7d"] is None or ts < b["oldest_in_7d"]:
                                 b["oldest_in_7d"] = ts
 
-                            # Accumulate weekly model tokens and prompt counts
+                            # Accumulate weekly model tokens and prompt counts by model
                             b["weekly_model_prompts"][model] = b["weekly_model_prompts"].get(model, 0) + 1
                             b["weekly_model_tokens"][model] = b["weekly_model_tokens"].get(model, 0) + 2500
 
@@ -302,7 +312,7 @@ def parse_history_by_category(paths, allowances, default_model):
         if today_tokens == 0 and b["today_prompts"] > 0:
             today_tokens = b["today_prompts"] * 2500
 
-        # Build model_usage_list across weekly models
+        # Build model_usage_list across weekly models (variants grouped together)
         model_usage_list = []
         for m, t in b["weekly_model_tokens"].items():
             model_usage_list.append({
@@ -323,7 +333,7 @@ def parse_history_by_category(paths, allowances, default_model):
                 "todayPrompts": b["today_prompts"]
             })
         elif not model_usage_list:
-            default_label = "Gemini 3.8 Flash (High)" if cat_key == "gemini" else "Claude Opus 4.6 (Thinking)"
+            default_label = "Gemini 3.8 Flash" if cat_key == "gemini" else "Claude Opus 4.6"
             model_usage_list.append({
                 "name": default_label,
                 "tokens": weekly_tokens,
@@ -727,7 +737,7 @@ def main():
         "name": "Gemini",
         "displayName": "Google Gemini",
         "agentName": "Antigravity",
-        "model": meta["model_name"],
+        "model": canonical_model(meta["model_name"]),
         "tier": meta["tier_label"],
         "ready": meta["ready"],
         "activeCategory": active_category,
