@@ -53,8 +53,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: keyboardPanel.fittedContentWidth(Style.space(420))
-    contentHeight: keyboardPanel.fittedContentHeight(panelContent.implicitHeight + Style.space(24), Style.space(660))
+    contentWidth: keyboardPanel.fittedContentWidth(Style.space(380))
+    contentHeight: keyboardPanel.fittedContentHeight(panelContent.implicitHeight + Style.space(32), Style.space(560))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -68,17 +68,15 @@ Panel {
         else if (text === "2") root.selectedCategory = "claude_others"
       }
 
-      Column {
+      ColumnLayout {
         id: panelContent
-        width: parent.width
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.fill: parent
+        anchors.margins: Style.space(16)
         spacing: Style.space(12)
-        topPadding: Style.space(12)
-        bottomPadding: Style.space(12)
 
         // ------------------ Header / Hero Card ------------------
         RowLayout {
-          width: parent.width
+          Layout.fillWidth: true
 
           RowLayout {
             spacing: Style.space(10)
@@ -86,8 +84,8 @@ Panel {
 
             Image {
               source: Qt.resolvedUrl(root.currentCategoryData.icon || (root.selectedCategory === "claude_others" ? "assets/claude.svg" : "assets/gemini.svg"))
-              sourceSize.width: Style.space(28)
-              sourceSize.height: Style.space(28)
+              sourceSize.width: Style.space(26)
+              sourceSize.height: Style.space(26)
             }
 
             ColumnLayout {
@@ -100,14 +98,14 @@ Panel {
                 font.bold: true
               }
               Text {
-                text: ((root.currentCategoryData.activeModel || root.usage.model || "GEMINI CODE ASSIST") + " · " + (root.usage.tier || "ANTIGRAVITY")).toUpperCase()
+                text: ((root.currentCategoryData.activeModel || root.usage.model || "GEMINI") + " · " + (root.usage.tier || "ANTIGRAVITY")).toUpperCase()
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption - 1
                 font.letterSpacing: 0.8
                 font.bold: true
                 elide: Text.ElideRight
-                Layout.maximumWidth: Style.space(240)
+                Layout.maximumWidth: Style.space(220)
               }
             }
           }
@@ -127,7 +125,7 @@ Panel {
 
         // ------------------ 2-Category Switcher ------------------
         RowLayout {
-          width: parent.width
+          Layout.fillWidth: true
           spacing: Style.space(8)
 
           Rectangle {
@@ -149,8 +147,8 @@ Panel {
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/gemini.svg")
-                sourceSize.width: Style.space(15)
-                sourceSize.height: Style.space(15)
+                sourceSize.width: Style.space(14)
+                sourceSize.height: Style.space(14)
               }
               Text {
                 text: "Gemini"
@@ -181,8 +179,8 @@ Panel {
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/claude.svg")
-                sourceSize.width: Style.space(15)
-                sourceSize.height: Style.space(15)
+                sourceSize.width: Style.space(14)
+                sourceSize.height: Style.space(14)
               }
               Text {
                 text: "Claude / Others"
@@ -195,7 +193,7 @@ Panel {
           }
         }
 
-        PanelSeparator { width: parent.width; foreground: root.foreground }
+        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
 
         // ------------------ Limits & Rate Meters ------------------
         Text {
@@ -208,11 +206,11 @@ Panel {
 
         // 5-hour Session Window
         ColumnLayout {
-          width: parent.width
+          Layout.fillWidth: true
           spacing: Style.space(6)
 
           RowLayout {
-            width: parent.width
+            Layout.fillWidth: true
             Text {
               text: "5-Hour Session Window"
               color: root.foreground
@@ -251,7 +249,7 @@ Panel {
           }
 
           RowLayout {
-            width: parent.width
+            Layout.fillWidth: true
             Text {
               text: "Resets in " + Model.formatCountdown((root.currentCategoryData.session) ? root.currentCategoryData.session.resetRemainingSeconds : 0)
               color: root.dim
@@ -270,11 +268,11 @@ Panel {
 
         // 7-day Weekly Window
         ColumnLayout {
-          width: parent.width
+          Layout.fillWidth: true
           spacing: Style.space(6)
 
           RowLayout {
-            width: parent.width
+            Layout.fillWidth: true
             Text {
               text: "Weekly Allowance (7-day)"
               color: root.foreground
@@ -313,7 +311,7 @@ Panel {
           }
 
           RowLayout {
-            width: parent.width
+            Layout.fillWidth: true
             Text {
               text: "Resets in " + Model.formatCountdown((root.currentCategoryData.weekly) ? root.currentCategoryData.weekly.resetRemainingSeconds : 0)
               color: root.dim
@@ -331,11 +329,11 @@ Panel {
           }
         }
 
-        PanelSeparator { width: parent.width; foreground: root.foreground }
+        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
 
         // ------------------ Tokens by Model ------------------
         RowLayout {
-          width: parent.width
+          Layout.fillWidth: true
           Text {
             text: "TOKENS BY MODEL"
             color: root.dim
@@ -358,8 +356,8 @@ Panel {
             ? root.currentCategoryData.modelUsageList
             : [{ name: root.currentCategoryData.activeModel || "None", tokens: root.currentCategoryData.todayTotalTokens || 0, prompts: root.currentCategoryData.todayPrompts || 0 }]
           delegate: Rectangle {
-            width: parent.width
-            height: Style.space(28)
+            Layout.fillWidth: true
+            height: Style.space(30)
             color: Style.selectedFillFor(root.foreground, root.accent)
             radius: Style.space(4)
 
@@ -388,118 +386,13 @@ Panel {
           }
         }
 
-        PanelSeparator { width: parent.width; foreground: root.foreground }
+        Item { Layout.fillHeight: true }
 
-        // ------------------ Recent Finished Job ------------------
-        RowLayout {
-          width: parent.width
-          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
-          spacing: Style.space(6)
-
-          Text {
-            text: "RECENT FINISHED JOB"
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-
-          Item { Layout.fillWidth: true }
-
-          // Status Badge
-          Rectangle {
-            implicitHeight: Style.space(16)
-            implicitWidth: statusText.implicitWidth + Style.space(12)
-            color: Style.selectedFillFor(root.foreground, root.accent)
-            radius: Style.space(8)
-
-            Text {
-              id: statusText
-              anchors.centerIn: parent
-              text: "✓ " + (root.usage && root.usage.recentJob ? root.usage.recentJob.status : "Completed")
-              color: root.accent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption - 2
-              font.bold: true
-            }
-          }
-
-          Text {
-            text: root.usage && root.usage.recentJob ? root.usage.recentJob.timeAgo : ""
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption - 1
-          }
-        }
-
-        Rectangle {
-          width: parent.width
-          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
-          implicitHeight: jobCol.implicitHeight + Style.space(12)
-          color: Style.selectedFillFor(root.foreground, root.accent)
-          opacity: 0.85
-          radius: Style.space(6)
-
-          ColumnLayout {
-            id: jobCol
-            anchors.fill: parent
-            anchors.margins: Style.space(8)
-            spacing: Style.space(5)
-
-            // Prompt Title
-            Text {
-              text: root.usage && root.usage.recentJob ? root.usage.recentJob.title : ""
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              wrapMode: Text.Wrap
-              maximumLineCount: 2
-              elide: Text.ElideRight
-              Layout.fillWidth: true
-            }
-
-            // Summary / Result preview
-            Text {
-              text: root.usage && root.usage.recentJob && root.usage.recentJob.summary ? ("“" + root.usage.recentJob.summary + "”") : ""
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption - 1
-              font.italic: true
-              wrapMode: Text.Wrap
-              maximumLineCount: 2
-              elide: Text.ElideRight
-              Layout.fillWidth: true
-              visible: Boolean(text.length > 0)
-            }
-
-            // Bottom metadata row: Workspace pill & steps/tools
-            RowLayout {
-              Layout.fillWidth: true
-              spacing: Style.space(8)
-
-              Text {
-                text: "📁 " + (root.usage && root.usage.recentJob ? root.usage.recentJob.workspace : "~")
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption - 1
-                elide: Text.ElideMiddle
-                Layout.fillWidth: true
-              }
-
-              Text {
-                text: root.usage && root.usage.recentJob ? (root.usage.recentJob.steps + " steps · " + root.usage.recentJob.toolCalls + " tools") : ""
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption - 1
-              }
-            }
-          }
-        }
+        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
 
         // ------------------ Footer / Status ------------------
         RowLayout {
-          width: parent.width
+          Layout.fillWidth: true
           Text {
             text: root.usage.statusText || ("Active · " + (root.currentCategoryData.totalPrompts || 0) + " prompts (" + (root.currentCategoryData.name || "Total") + ")")
             color: root.dim
