@@ -21,6 +21,16 @@ BarWidget {
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
 
+  readonly property bool isUrgent: {
+    if (!service || !service.usageData) return false
+    var cats = service.usageData.categories
+    if (cats) {
+      if (cats.gemini && ((cats.gemini.session && cats.gemini.session.percent >= 0.85) || cats.gemini.behindPace)) return true
+      if (cats.claude_others && ((cats.claude_others.session && cats.claude_others.session.percent >= 0.85) || cats.claude_others.behindPace)) return true
+    }
+    return Boolean((service.usageData.session && service.usageData.session.percent >= 0.85) || service.usageData.behindPace)
+  }
+
   function open() { if (panelLoader.item) panelLoader.item.open() }
   function close() { if (panelLoader.item) panelLoader.item.close() }
   function toggle() { if (panelLoader.item) panelLoader.item.toggle() }
@@ -79,10 +89,17 @@ BarWidget {
     labelVisible: false
     fixedWidth: root.implicitWidth
     fixedHeight: root.implicitHeight
-    tooltipText: "Gemini / Antigravity usage: " +
-      Model.formatPercent((service.usageData && service.usageData.session) ? service.usageData.session.percent : 0) +
-      " used · click for details, right-click to refresh"
-    active: Boolean((service.usageData && service.usageData.session && service.usageData.session.percent >= 0.85) || (service.usageData && service.usageData.behindPace))
+    tooltipText: {
+      if (!service.usageData || !service.usageData.categories) {
+        return "Gemini & Antigravity usage · click for details"
+      }
+      var g = service.usageData.categories.gemini
+      var c = service.usageData.categories.claude_others
+      var gP = Model.formatPercent(g && g.session ? g.session.percent : 0)
+      var cP = Model.formatPercent(c && c.session ? c.session.percent : 0)
+      return "Gemini: " + gP + " (5h) · Claude/Others: " + cP + " (5h) · click for details, right-click to refresh"
+    }
+    active: root.isUrgent
 
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton || buttonCode === Qt.MiddleButton) {
@@ -100,7 +117,7 @@ BarWidget {
 
       Image {
         anchors.verticalCenter: parent.verticalCenter
-        source: Qt.resolvedUrl("assets/gemini.svg")
+        source: Qt.resolvedUrl((service.usageData && service.usageData.activeCategory === "claude_others") ? "assets/claude.svg" : "assets/gemini.svg")
         sourceSize.width: Style.bar.iconCanvas
         sourceSize.height: Style.bar.iconCanvas
       }
@@ -109,7 +126,7 @@ BarWidget {
         anchors.verticalCenter: parent.verticalCenter
         visible: root.showLabel && !root.vertical
         text: Model.formatPercent((service.usageData && service.usageData.session) ? service.usageData.session.percent : 0)
-        color: (service.usageData && service.usageData.session && service.usageData.session.percent >= 0.85) ? root.urgent : root.foreground
+        color: root.isUrgent ? root.urgent : root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: true
