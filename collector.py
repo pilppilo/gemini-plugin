@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gemini & Antigravity Usage Collector for Omarchy.
-Extracts live authoritative quota and subscription tier from Antigravity's local language server,
+Extracts live authoritative quota, active model, and actual token context from Antigravity,
 with automatic fallback to local history and cached states.
 Outputs JSON for the Omarchy Bar Widget & Panel and syncs ~/.local/state/omarchy/agents/usage/gemini.json.
 """
@@ -29,6 +29,7 @@ def get_paths():
         "antigravity_cli": home / ".gemini" / "antigravity-cli",
         "history_file": home / ".gemini" / "antigravity-cli" / "history.jsonl",
         "db_file": home / ".gemini" / "antigravity-cli" / "conversation_summaries.db",
+        "conversations_dir": home / ".gemini" / "antigravity-cli" / "conversations",
         "settings_file": home / ".gemini" / "antigravity-cli" / "settings.json",
         "oauth_creds": home / ".gemini" / "oauth_creds.json",
         "antigravity_token": home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token",
@@ -161,6 +162,123 @@ def parse_live_data(quota_data, tier_data):
         "session": session_info,
         "weekly": weekly_info
     }
+
+
+def parse_protobuf(data):
+    i = 0
+    fields = {}
+    while i < len(data):
+        key = 0
+        shift = 0
+        while True:
+            if i >= len(data):
+                break
+            b = data[i]
+            i += 1
+            key |= (b & 0x7F) << shift
+            if (b & 0x80) == 0:
+                break
+            shift += 7
+        field_num = key >> 3
+        wire_type = key & 0x07
+        if wire_type == 0:
+            val = 0
+            shift = 0
+            while True:
+                if i >= len(data):
+                    break
+                b = data[i]
+                i += 1
+                val |= (b & 0x7F) << shift
+                if (b & 0x80) == 0:
+                    break
+                shift += 7
+            fields[field_num] = val
+        elif wire_type == 2:
+            val_len = 0
+            shift = 0
+            while True:
+                if i >= len(data):
+                    break
+                b = data[i]
+                i += 1
+                val_len |= (b & 0x7F) << shift
+                if (b & 0x80) == 0:
+                    break
+                shift += 7
+            val = data[i:i+val_len]
+            i += val_len
+            fields[field_num] = val
+        elif wire_type == 1:
+            i += 8
+        elif wire_type == 5:
+            i += 4
+        else:
+            break
+    return fields
+
+
+def get_latest_token_usage(paths):
+    conv_dir = paths.get("conversations_dir")
+    if not conv_dir or not conv_dir.exists():
+        return 0, 0
+    try:
+        db_files = sorted(conv_dir.glob("*.db"), key=os.path.getmtime, reverse=True)
+        if not db_files:
+            return 0, 0
+        latest_db = db_files[0]
+        conn = sqlite3.connect(f"file:{latest_db}?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute("SELECT metadata FROM steps WHERE metadata IS NOT NULL ORDER BY idx DESC LIMIT 15")
+        for row in c.fetchall():
+            blob = row[0]
+            if not blob:
+                continue
+            top = parse_protobuf(blob)
+            if 9 in top and isinstance(top[9], bytes):
+                sub9 = parse_protobuf(top[9])
+                token_count = sub9.get(5)
+                output_tokens = sub9.get(1, 0)
+                if token_count and token_count > 0:
+                    conn.close()
+                    return token_count, output_tokens
+        conn.close()
+    except Exception:
+        pass
+    return 0, 0
+
+
+def get_active_model(paths):
+    cli_dir = paths["antigravity_cli"]
+    log_files = [cli_dir / "cli.log"]
+    if (cli_dir / "log").exists():
+        try:
+            log_files += sorted((cli_dir / "log").glob("cli-*.log"), key=os.path.getmtime, reverse=True)
+        except Exception:
+            pass
+
+    for lf in log_files:
+        if lf.exists():
+            try:
+                with open(lf, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        m = re.search(r'Propagating selected model override to backend: label=\"([^\"]+)\"', line)
+                        if m:
+                            return m.group(1)
+            except Exception:
+                pass
+
+    if paths["settings_file"].exists():
+        try:
+            with open(paths["settings_file"], "r", encoding="utf-8") as f:
+                data = json.load(f)
+                m = data.get("model")
+                if m:
+                    return m
+        except Exception:
+            pass
+
+    return "Gemini 3.8 Flash (High)"
 
 
 def parse_history(history_file, session_allowance, weekly_allowance):
@@ -324,21 +442,11 @@ def parse_sessions_db(db_file):
 
 def get_model_and_tier(paths):
     tier_label = "Google AI Pro"
-    model_name = "Gemini 3.8 Flash (Medium)"
+    model_name = get_active_model(paths)
     ready = False
 
     if paths["antigravity_token"].exists() or paths["oauth_creds"].exists():
         ready = True
-
-    if paths["settings_file"].exists():
-        try:
-            with open(paths["settings_file"], "r", encoding="utf-8") as f:
-                data = json.load(f)
-                m = data.get("model")
-                if m:
-                    model_name = m
-        except Exception:
-            pass
 
     return {
         "tier_label": tier_label,
@@ -350,6 +458,9 @@ def get_model_and_tier(paths):
 def publish_omarchy_state(paths, payload):
     try:
         paths["state_dir"].mkdir(parents=True, exist_ok=True)
+        output_tokens = payload.get("outputTokens", 0)
+        input_tokens = max(0, payload["todayTotalTokens"] - output_tokens)
+
         gemini_state = {
             "schemaVersion": 1,
             "id": "gemini",
@@ -370,8 +481,8 @@ def publish_omarchy_state(paths, payload):
             "activeDates": payload["activeDates"],
             "modelUsage": {
                 payload["model"]: {
-                    "inputTokens": int(payload["todayTotalTokens"] * 0.7),
-                    "outputTokens": int(payload["todayTotalTokens"] * 0.3),
+                    "inputTokens": input_tokens,
+                    "outputTokens": output_tokens,
                     "cacheReadInputTokens": 0,
                     "cacheCreationInputTokens": 0
                 }
@@ -469,8 +580,14 @@ def main():
             weekly_reset_sec = w["resetRemainingSeconds"]
             weekly_allowance = 0
 
-    today_tokens = stats["today_prompts"] * 2500
-    total_tokens = stats["total_prompts"] * 2500
+    # Extract actual context token usage from active conversation
+    actual_tokens, output_tokens = get_latest_token_usage(paths)
+    if actual_tokens > 0:
+        today_tokens = actual_tokens
+        total_tokens = actual_tokens
+    else:
+        today_tokens = stats["today_prompts"] * 2500
+        total_tokens = stats["total_prompts"] * 2500
 
     result = {
         "id": "gemini",
@@ -483,6 +600,7 @@ def main():
         "todayPrompts": stats["today_prompts"],
         "todaySessions": stats["today_sessions"],
         "todayTotalTokens": today_tokens,
+        "outputTokens": output_tokens,
         "totalPrompts": stats["total_prompts"],
         "totalSessions": stats["total_sessions"],
         "activeDays": stats["active_days"],
