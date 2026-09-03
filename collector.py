@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Gemini & Antigravity Usage Collector for Omarchy.
-Extracts usage statistics, rate limits, prompts, sessions, and pace from
-Antigravity and Gemini CLI stores for two categories:
+Extracts usage statistics, rate limits, prompts, and pace for two categories:
   1) Gemini (Google Gemini models)
   2) Claude / Others (Claude Opus/Sonnet, GPT-OSS, and other third-party models)
 Outputs JSON for the Omarchy Bar Widget & Details Panel.
@@ -13,7 +12,6 @@ import argparse
 import json
 import os
 import re
-import sqlite3
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -31,7 +29,6 @@ def get_paths():
         "gemini_dir": home / ".gemini",
         "antigravity_cli": home / ".gemini" / "antigravity-cli",
         "history_file": home / ".gemini" / "antigravity-cli" / "history.jsonl",
-        "db_file": home / ".gemini" / "antigravity-cli" / "conversation_summaries.db",
         "settings_file": home / ".gemini" / "antigravity-cli" / "settings.json",
         "oauth_creds": home / ".gemini" / "oauth_creds.json",
         "antigravity_token": home / ".gemini" / "antigravity-cli" / "antigravity-oauth-token",
@@ -43,7 +40,6 @@ def get_paths():
 def canonical_model(name):
     if not name:
         return "Unknown"
-    # Strip any parenthetical variant/effort e.g. (High), (Medium), (Thinking)
     cleaned = re.sub(r"\s*\([^)]*\)", "", name).strip()
     return cleaned or name.strip()
 
@@ -74,8 +70,6 @@ def build_conversation_timelines(paths):
         try:
             with open(t_file, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
-                    if not line.strip():
-                        continue
                     if "Model Selection" in line:
                         m = re.search(r"Model Selection\` from .*? to (.*?)\.\s*No need", line)
                         if not m:
@@ -119,8 +113,6 @@ def init_category_bucket():
     return {
         "total_prompts": 0,
         "today_prompts": 0,
-        "today_sessions": set(),
-        "total_sessions": set(),
         "session_prompts": 0,
         "weekly_prompts": 0,
         "oldest_in_5h": None,
@@ -177,8 +169,6 @@ def parse_history_by_category(paths, allowances, default_model):
 
                         b["total_prompts"] += 1
                         b["models_seen"].add(model)
-                        if cid:
-                            b["total_sessions"].add(cid)
 
                         if ts <= 0:
                             continue
@@ -208,8 +198,6 @@ def parse_history_by_category(paths, allowances, default_model):
 
                         if day_str == today_str:
                             b["today_prompts"] += 1
-                            if cid:
-                                b["today_sessions"].add(cid)
                             b["today_model_prompts"][model] = b["today_model_prompts"].get(model, 0) + 1
                             b["today_model_tokens"][model] = b["today_model_tokens"].get(model, 0) + 2500
                     except Exception:
@@ -353,12 +341,10 @@ def parse_history_by_category(paths, allowances, default_model):
             "icon": cfg["icon"],
             "activeModel": active_cat_model,
             "todayPrompts": b["today_prompts"],
-            "todaySessions": len(b["today_sessions"]),
             "todayTotalTokens": today_tokens,
             "weeklyPrompts": b["weekly_prompts"],
             "weeklyTotalTokens": weekly_tokens,
             "totalPrompts": b["total_prompts"],
-            "totalSessions": len(b["total_sessions"]),
             "activeDays": len(b["active_dates"]),
             "behindPace": behind_pace,
             "session": {
@@ -380,194 +366,6 @@ def parse_history_by_category(paths, allowances, default_model):
         }
 
     return categories
-
-
-def sanitize_path(path_str):
-    if not path_str:
-        return ""
-    p = path_str.replace("file://", "")
-    return re.sub(r"^/home/[^/]+", "~", p)
-
-
-def parse_sessions_db(db_file):
-    sessions = []
-    if not db_file.exists():
-        return sessions
-
-    try:
-        conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
-        c = conn.cursor()
-        for row in c.execute(
-            "SELECT conversation_id, title, step_count, last_modified_time, workspace_uris "
-            "FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 6"
-        ):
-            cid, title, steps, mtime, uris = row
-            ws = ""
-            try:
-                u = json.loads(uris)
-                if u and isinstance(u, list):
-                    ws = sanitize_path(u[0])
-            except Exception:
-                ws = sanitize_path(str(uris or ""))
-
-            sessions.append({
-                "id": str(cid or "")[:8],
-                "fullId": str(cid or ""),
-                "title": (title or "Session").strip(),
-                "steps": steps or 0,
-                "modified": str(mtime or "")[:19].replace("T", " "),
-                "workspace": ws
-            })
-        conn.close()
-    except Exception as e:
-        sys.stderr.write(f"Warning: could not query conversation_summaries.db: {e}\n")
-
-    return sessions
-
-
-def clean_preview(text, max_len=160):
-    if not text:
-        return ""
-    text = re.sub(r"<ADDITIONAL_METADATA>[\s\S]*?</ADDITIONAL_METADATA>", "", text)
-    text = re.sub(r"<USER_SETTINGS_CHANGE>[\s\S]*?</USER_SETTINGS_CHANGE>", "", text)
-    text = re.sub(r"<SYSTEM_MESSAGE>[\s\S]*?</SYSTEM_MESSAGE>", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-    text = re.sub(r"^>.*$", "", text, flags=re.MULTILINE)
-    text = re.sub(r"<[^>]+>", "", text)
-    text = text.replace("**", "").replace("__", "").replace("`", "").replace("#", "")
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    cleaned = " ".join(lines)
-    if len(cleaned) > max_len:
-        return cleaned[:max_len - 3].strip() + "..."
-    return cleaned
-
-
-def parse_recent_finished_job(paths):
-    brain_dir = paths["antigravity_cli"] / "brain"
-    history_file = paths["history_file"]
-
-    histories = []
-    if history_file.exists():
-        try:
-            with open(history_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            histories.append(json.loads(line))
-                        except Exception:
-                            pass
-        except Exception:
-            pass
-
-    transcripts = []
-    if brain_dir.exists():
-        for d in brain_dir.iterdir():
-            if not d.is_dir():
-                continue
-            t_file = d / ".system_generated" / "logs" / "transcript.jsonl"
-            if t_file.exists():
-                transcripts.append((t_file.stat().st_mtime, d.name, t_file))
-        transcripts.sort(key=lambda x: x[0], reverse=True)
-
-    for mtime, cid, t_file in transcripts:
-        try:
-            with open(t_file, "r", encoding="utf-8") as f:
-                lines = [json.loads(l) for l in f if l.strip()]
-        except Exception:
-            continue
-
-        if not lines:
-            continue
-
-        last_response_idx = -1
-        for i in range(len(lines) - 1, -1, -1):
-            step = lines[i]
-            if step.get("type") == "PLANNER_RESPONSE" and step.get("content") and step.get("status") == "DONE":
-                last_response_idx = i
-                break
-
-        if last_response_idx == -1:
-            continue
-
-        finished_step = lines[last_response_idx]
-        finish_time_str = finished_step.get("created_at")
-        result_content = finished_step.get("content", "")
-
-        prompt = ""
-        prompt_step_idx = -1
-        for i in range(last_response_idx - 1, -1, -1):
-            if lines[i].get("type") == "USER_INPUT":
-                prompt = lines[i].get("content", "")
-                prompt_step_idx = i
-                break
-
-        turn_slice = lines[prompt_step_idx:last_response_idx + 1] if prompt_step_idx >= 0 else lines[:last_response_idx + 1]
-        turn_steps = len(turn_slice)
-        turn_tools = sum(len(s.get("tool_calls", [])) for s in turn_slice if s.get("tool_calls"))
-
-        workspace = ""
-        for s in turn_slice:
-            if s.get("tool_calls"):
-                for tc in s["tool_calls"]:
-                    args = tc.get("args") or {}
-                    if isinstance(args, dict) and "Cwd" in args:
-                        workspace = str(args["Cwd"]).strip("\"'\n ")
-                        break
-            if workspace:
-                break
-
-        if not workspace:
-            for h in reversed(histories):
-                if h.get("conversationId") == cid and h.get("workspace"):
-                    workspace = h.get("workspace")
-                    break
-
-        finish_dt = None
-        if finish_time_str:
-            try:
-                finish_dt = datetime.fromisoformat(finish_time_str.replace("Z", "+00:00"))
-            except Exception:
-                pass
-        if not finish_dt:
-            finish_dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
-
-        diff_sec = max(0, int((datetime.now(timezone.utc) - finish_dt).total_seconds()))
-        if diff_sec < 60:
-            time_ago = "Just now"
-        elif diff_sec < 3600:
-            time_ago = f"{diff_sec // 60}m ago"
-        elif diff_sec < 86400:
-            time_ago = f"{diff_sec // 3600}h ago"
-        else:
-            time_ago = f"{diff_sec // 86400}d ago"
-
-        local_time_str = finish_dt.astimezone().strftime("%H:%M")
-
-        clean_prompt_text = clean_preview(prompt, 110)
-        if not clean_prompt_text or clean_prompt_text.isdigit() or len(clean_prompt_text) < 4:
-            for h in reversed(histories):
-                if h.get("conversationId") == cid:
-                    d = clean_preview(h.get("display", ""), 110)
-                    if d and not d.isdigit() and len(d) > len(clean_prompt_text):
-                        clean_prompt_text = d
-                        break
-
-        return {
-            "id": cid[:8],
-            "fullId": cid,
-            "title": clean_prompt_text or "Antigravity Task",
-            "workspace": sanitize_path(workspace),
-            "status": "Completed",
-            "steps": turn_steps,
-            "totalSteps": len(lines),
-            "toolCalls": turn_tools,
-            "timeAgo": time_ago,
-            "finishTime": local_time_str,
-            "summary": clean_preview(result_content, 180)
-        }
-
-    return None
 
 
 def get_model_and_tier(paths):
@@ -611,14 +409,14 @@ def publish_omarchy_state(paths, payload):
             "ready": payload["ready"],
             "hasLocalStats": True,
             "todayPrompts": gemini_cat["todayPrompts"],
-            "todaySessions": gemini_cat["todaySessions"],
+            "todaySessions": 0,
             "todayTotalTokens": gemini_cat["todayTotalTokens"],
             "todayTokensByModel": {
                 gemini_cat["activeModel"]: gemini_cat["todayTotalTokens"]
             },
             "recentDays": [],
             "totalPrompts": gemini_cat["totalPrompts"],
-            "totalSessions": gemini_cat["totalSessions"],
+            "totalSessions": 0,
             "activeDays": gemini_cat["activeDays"],
             "activeDates": [],
             "modelUsage": {
@@ -661,14 +459,14 @@ def publish_omarchy_state(paths, payload):
             "ready": payload["ready"] and (claude_cat["totalPrompts"] > 0),
             "hasLocalStats": True,
             "todayPrompts": claude_cat["todayPrompts"],
-            "todaySessions": claude_cat["todaySessions"],
+            "todaySessions": 0,
             "todayTotalTokens": claude_cat["todayTotalTokens"],
             "todayTokensByModel": {
                 claude_cat["activeModel"]: claude_cat["todayTotalTokens"]
             },
             "recentDays": [],
             "totalPrompts": claude_cat["totalPrompts"],
-            "totalSessions": claude_cat["totalSessions"],
+            "totalSessions": 0,
             "activeDays": claude_cat["activeDays"],
             "activeDates": [],
             "modelUsage": {
@@ -729,9 +527,6 @@ def main():
     active_category = get_category(meta["model_name"])
     active_cat_data = categories.get(active_category) or categories["gemini"]
 
-    recent_sessions = parse_sessions_db(paths["db_file"]) if not args.limits_only else []
-    recent_job = parse_recent_finished_job(paths) if not args.limits_only else None
-
     result = {
         "id": "gemini",
         "name": "Gemini",
@@ -745,20 +540,16 @@ def main():
 
         # Root-level conveniences mapped to active category:
         "todayPrompts": active_cat_data["todayPrompts"],
-        "todaySessions": active_cat_data["todaySessions"],
         "todayTotalTokens": active_cat_data["todayTotalTokens"],
         "weeklyPrompts": active_cat_data["weeklyPrompts"],
         "weeklyTotalTokens": active_cat_data["weeklyTotalTokens"],
         "totalPrompts": active_cat_data["totalPrompts"],
-        "totalSessions": active_cat_data["totalSessions"],
         "activeDays": active_cat_data["activeDays"],
         "behindPace": active_cat_data["behindPace"],
         "session": active_cat_data["session"],
         "weekly": active_cat_data["weekly"],
         "modelUsageList": active_cat_data["modelUsageList"],
 
-        "recentSessions": recent_sessions,
-        "recentJob": recent_job,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
         "statusText": "" if meta["ready"] else "Waiting for auth"
     }
