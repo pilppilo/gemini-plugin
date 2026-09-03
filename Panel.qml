@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import qs.Commons
 import qs.Ui
@@ -54,7 +53,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: keyboardPanel.fittedContentWidth(Style.space(380))
-    contentHeight: keyboardPanel.fittedContentHeight(panelContent.implicitHeight + Style.space(32), Style.space(560))
+    contentHeight: keyboardPanel.fittedContentHeight(Style.space(480), Style.space(480))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -68,28 +67,37 @@ Panel {
         else if (text === "2") root.selectedCategory = "claude_others"
       }
 
-      ColumnLayout {
+      Item {
         id: panelContent
         anchors.fill: parent
         anchors.margins: Style.space(16)
-        spacing: Style.space(12)
 
-        // ------------------ Header / Hero Card ------------------
-        RowLayout {
-          Layout.fillWidth: true
+        // ------------------ 1. Header / Hero Row ------------------
+        Item {
+          id: headerRow
+          anchors.top: parent.top
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(36)
 
-          RowLayout {
+          Row {
+            anchors.left: parent.left
+            anchors.right: refreshLabel.left
+            anchors.rightMargin: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(10)
-            Layout.alignment: Qt.AlignVCenter
 
             Image {
               source: Qt.resolvedUrl(root.currentCategoryData.icon || (root.selectedCategory === "claude_others" ? "assets/claude.svg" : "assets/gemini.svg"))
               sourceSize.width: Style.space(26)
               sourceSize.height: Style.space(26)
+              anchors.verticalCenter: parent.verticalCenter
             }
 
-            ColumnLayout {
+            Column {
+              anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(1)
+
               Text {
                 text: root.currentCategoryData.displayName || (root.selectedCategory === "claude_others" ? "Claude / Others" : "Google Gemini")
                 color: root.foreground
@@ -105,32 +113,35 @@ Panel {
                 font.letterSpacing: 0.8
                 font.bold: true
                 elide: Text.ElideRight
-                Layout.maximumWidth: Style.space(220)
+                width: Style.space(210)
               }
             }
           }
 
-          Item {
-            Layout.fillWidth: true
-          }
-
           Text {
+            id: refreshLabel
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             text: (service && service.refreshing) ? "Refreshing…" : "R to refresh"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
-            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
           }
         }
 
-        // ------------------ 2-Category Switcher ------------------
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
+        // ------------------ 2. Switcher Pills ------------------
+        Item {
+          id: switcherRow
+          anchors.top: headerRow.bottom
+          anchors.topMargin: Style.space(12)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(32)
 
           Rectangle {
-            Layout.fillWidth: true
-            height: Style.space(32)
+            anchors.left: parent.left
+            width: (parent.width - Style.space(8)) / 2
+            height: parent.height
             radius: Style.space(6)
             color: root.selectedCategory === "gemini" ? Style.selectedFillFor(root.foreground, root.accent) : "transparent"
             border.color: root.selectedCategory === "gemini" ? root.accent : Style.selectedFillFor(root.foreground, root.accent)
@@ -142,13 +153,14 @@ Panel {
               onClicked: root.selectedCategory = "gemini"
             }
 
-            RowLayout {
+            Row {
               anchors.centerIn: parent
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/gemini.svg")
                 sourceSize.width: Style.space(14)
                 sourceSize.height: Style.space(14)
+                anchors.verticalCenter: parent.verticalCenter
               }
               Text {
                 text: "Gemini"
@@ -156,13 +168,15 @@ Panel {
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body - 1
                 font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
               }
             }
           }
 
           Rectangle {
-            Layout.fillWidth: true
-            height: Style.space(32)
+            anchors.right: parent.right
+            width: (parent.width - Style.space(8)) / 2
+            height: parent.height
             radius: Style.space(6)
             color: root.selectedCategory === "claude_others" ? Style.selectedFillFor(root.foreground, root.accent) : "transparent"
             border.color: root.selectedCategory === "claude_others" ? root.accent : Style.selectedFillFor(root.foreground, root.accent)
@@ -174,13 +188,14 @@ Panel {
               onClicked: root.selectedCategory = "claude_others"
             }
 
-            RowLayout {
+            Row {
               anchors.centerIn: parent
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/claude.svg")
                 sourceSize.width: Style.space(14)
                 sourceSize.height: Style.space(14)
+                anchors.verticalCenter: parent.verticalCenter
               }
               Text {
                 text: "Claude / Others"
@@ -188,15 +203,28 @@ Panel {
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body - 1
                 font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
               }
             }
           }
         }
 
-        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
+        // Top Content Separator
+        PanelSeparator {
+          id: topSeparator
+          anchors.top: switcherRow.bottom
+          anchors.topMargin: Style.space(12)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          foreground: root.foreground
+        }
 
-        // ------------------ Limits & Rate Meters ------------------
+        // ------------------ 3. Rate Limits & Allowances ------------------
         Text {
+          id: limitsTitle
+          anchors.top: topSeparator.bottom
+          anchors.topMargin: Style.space(12)
+          anchors.left: parent.left
           text: "RATE LIMITS & ALLOWANCES (" + (root.currentCategoryData.name || "ACTIVE").toUpperCase() + ")"
           color: root.dim
           font.family: root.fontFamily
@@ -204,38 +232,57 @@ Panel {
           font.bold: true
         }
 
-        // 5-hour Session Window
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(6)
+        // 5-Hour Session Window
+        Item {
+          id: sessionMeter
+          anchors.top: limitsTitle.bottom
+          anchors.topMargin: Style.space(8)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(42)
 
-          RowLayout {
-            Layout.fillWidth: true
+          Item {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Style.space(16)
+
             Text {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               text: "5-Hour Session Window"
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               font.bold: true
             }
-            Item { Layout.fillWidth: true }
-            Text {
-              text: (root.currentCategoryData.session ? root.currentCategoryData.session.used : 0) + " / " + (root.currentCategoryData.session ? root.currentCategoryData.session.allowance : 50) + " prompts"
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              text: Model.formatPercent(root.currentCategoryData.session ? root.currentCategoryData.session.percent : 0)
-              color: (root.currentCategoryData.session && root.currentCategoryData.session.percent >= 0.85) ? root.urgent : root.accent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+
+            Row {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(8)
+
+              Text {
+                text: (root.currentCategoryData.session ? root.currentCategoryData.session.used : 0) + " / " + (root.currentCategoryData.session ? root.currentCategoryData.session.allowance : 50) + " prompts"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+              Text {
+                text: Model.formatPercent(root.currentCategoryData.session ? root.currentCategoryData.session.percent : 0)
+                color: (root.currentCategoryData.session && root.currentCategoryData.session.percent >= 0.85) ? root.urgent : root.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
             }
           }
 
           Rectangle {
-            Layout.fillWidth: true
+            anchors.top: parent.top
+            anchors.topMargin: Style.space(20)
+            anchors.left: parent.left
+            anchors.right: parent.right
             height: Style.space(8)
             radius: Style.space(4)
             color: root.trackBg
@@ -248,16 +295,24 @@ Panel {
             }
           }
 
-          RowLayout {
-            Layout.fillWidth: true
+          Item {
+            anchors.top: parent.top
+            anchors.topMargin: Style.space(30)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Style.space(12)
+
             Text {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               text: "Resets in " + Model.formatCountdown((root.currentCategoryData.session) ? root.currentCategoryData.session.resetRemainingSeconds : 0)
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }
-            Item { Layout.fillWidth: true }
             Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               text: "Rolling 5-hour window"
               color: root.dim
               font.family: root.fontFamily
@@ -266,38 +321,57 @@ Panel {
           }
         }
 
-        // 7-day Weekly Window
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(6)
+        // Weekly Allowance (7-Day)
+        Item {
+          id: weeklyMeter
+          anchors.top: sessionMeter.bottom
+          anchors.topMargin: Style.space(8)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(42)
 
-          RowLayout {
-            Layout.fillWidth: true
+          Item {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Style.space(16)
+
             Text {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               text: "Weekly Allowance (7-day)"
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               font.bold: true
             }
-            Item { Layout.fillWidth: true }
-            Text {
-              text: (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.used : 0) + " / " + (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.allowance : 500) + " prompts"
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              text: Model.formatPercent(root.currentCategoryData.weekly ? root.currentCategoryData.weekly.percent : 0)
-              color: (root.currentCategoryData.behindPace || (root.currentCategoryData.weekly && root.currentCategoryData.weekly.percent >= 0.85)) ? root.urgent : root.accent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+
+            Row {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(8)
+
+              Text {
+                text: (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.used : 0) + " / " + (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.allowance : 500) + " prompts"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+              Text {
+                text: Model.formatPercent(root.currentCategoryData.weekly ? root.currentCategoryData.weekly.percent : 0)
+                color: (root.currentCategoryData.behindPace || (root.currentCategoryData.weekly && root.currentCategoryData.weekly.percent >= 0.85)) ? root.urgent : root.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
             }
           }
 
           Rectangle {
-            Layout.fillWidth: true
+            anchors.top: parent.top
+            anchors.topMargin: Style.space(20)
+            anchors.left: parent.left
+            anchors.right: parent.right
             height: Style.space(8)
             radius: Style.space(4)
             color: root.trackBg
@@ -310,16 +384,24 @@ Panel {
             }
           }
 
-          RowLayout {
-            Layout.fillWidth: true
+          Item {
+            anchors.top: parent.top
+            anchors.topMargin: Style.space(30)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Style.space(12)
+
             Text {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               text: "Resets in " + Model.formatCountdown((root.currentCategoryData.weekly) ? root.currentCategoryData.weekly.resetRemainingSeconds : 0)
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }
-            Item { Layout.fillWidth: true }
             Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               text: root.currentCategoryData.behindPace ? "Behind pace" : "On pace"
               color: root.currentCategoryData.behindPace ? root.urgent : root.accent
               font.family: root.fontFamily
@@ -329,20 +411,38 @@ Panel {
           }
         }
 
-        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
+        // Middle Separator
+        PanelSeparator {
+          id: midSeparator
+          anchors.top: weeklyMeter.bottom
+          anchors.topMargin: Style.space(10)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          foreground: root.foreground
+        }
 
-        // ------------------ Tokens by Model ------------------
-        RowLayout {
-          Layout.fillWidth: true
+        // ------------------ 4. Tokens by Model ------------------
+        Item {
+          id: tokensHeaderRow
+          anchors.top: midSeparator.bottom
+          anchors.topMargin: Style.space(10)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(16)
+
           Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
             text: "TOKENS BY MODEL"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true
           }
-          Item { Layout.fillWidth: true }
+
           Text {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             text: "This Week: " + (root.currentCategoryData.weekly ? root.currentCategoryData.weekly.used : 0) + " prompts (" + Model.formatCompactNumber(root.currentCategoryData.weeklyTotalTokens || 0) + " tokens)"
             color: root.foreground
             font.family: root.fontFamily
@@ -351,31 +451,43 @@ Panel {
           }
         }
 
-        Repeater {
-          model: (root.currentCategoryData && root.currentCategoryData.modelUsageList && root.currentCategoryData.modelUsageList.length > 0)
-            ? root.currentCategoryData.modelUsageList
-            : [{ name: root.currentCategoryData.activeModel || "None", tokens: root.currentCategoryData.todayTotalTokens || 0, prompts: root.currentCategoryData.todayPrompts || 0 }]
-          delegate: Rectangle {
-            Layout.fillWidth: true
-            height: Style.space(30)
-            color: Style.selectedFillFor(root.foreground, root.accent)
-            radius: Style.space(4)
+        Column {
+          id: modelsColumn
+          anchors.top: tokensHeaderRow.bottom
+          anchors.topMargin: Style.space(8)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(4)
 
-            RowLayout {
-              anchors.fill: parent
-              anchors.leftMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
+          Repeater {
+            model: (root.currentCategoryData && root.currentCategoryData.modelUsageList && root.currentCategoryData.modelUsageList.length > 0)
+              ? root.currentCategoryData.modelUsageList
+              : [{ name: root.currentCategoryData.activeModel || "None", tokens: root.currentCategoryData.todayTotalTokens || 0, prompts: root.currentCategoryData.todayPrompts || 0 }]
+
+            delegate: Rectangle {
+              width: modelsColumn.width
+              height: Style.space(28)
+              color: Style.selectedFillFor(root.foreground, root.accent)
+              radius: Style.space(4)
 
               Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.right: statText.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
                 text: modelData.name
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
-                Layout.fillWidth: true
                 elide: Text.ElideRight
               }
 
               Text {
+                id: statText
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
                 text: (modelData.prompts ? (modelData.prompts + " prompts · ") : "") + Model.formatCompactNumber(modelData.tokens) + " tokens"
                 color: root.dim
                 font.family: root.fontFamily
@@ -386,21 +498,35 @@ Panel {
           }
         }
 
-        Item { Layout.fillHeight: true }
+        // ------------------ 5. Bottom Footer / Status ------------------
+        PanelSeparator {
+          id: footerSeparator
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: footerRow.top
+          anchors.bottomMargin: Style.space(8)
+          foreground: root.foreground
+        }
 
-        PanelSeparator { Layout.fillWidth: true; foreground: root.foreground }
+        Item {
+          id: footerRow
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          height: Style.space(16)
 
-        // ------------------ Footer / Status ------------------
-        RowLayout {
-          Layout.fillWidth: true
           Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
             text: root.usage.statusText || ("Active · " + (root.currentCategoryData.totalPrompts || 0) + " prompts (" + (root.currentCategoryData.name || "Total") + ")")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
-          Item { Layout.fillWidth: true }
+
           Text {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             text: "[R] Refresh · [Esc] Close"
             color: root.dim
             font.family: root.fontFamily
