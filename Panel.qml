@@ -52,8 +52,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: keyboardPanel.fittedContentWidth(Style.space(380))
-    contentHeight: keyboardPanel.fittedContentHeight(Style.space(560), Style.space(560))
+    contentWidth: keyboardPanel.fittedContentWidth(Style.space(370))
+    contentHeight: keyboardPanel.fittedContentHeight(Style.space(490), Style.space(490))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -70,7 +70,7 @@ Panel {
       Item {
         id: panelContent
         anchors.fill: parent
-        anchors.margins: Style.space(16)
+        anchors.margins: Style.space(6)
 
         // ------------------ 1. Header / Hero Row ------------------
         Item {
@@ -78,7 +78,7 @@ Panel {
           anchors.top: parent.top
           anchors.left: parent.left
           anchors.right: parent.right
-          height: Style.space(36)
+          height: Style.space(34)
 
           Row {
             anchors.left: parent.left
@@ -89,8 +89,8 @@ Panel {
 
             Image {
               source: Qt.resolvedUrl(root.currentCategoryData.icon || (root.selectedCategory === "claude_others" ? "assets/claude.svg" : "assets/gemini.svg"))
-              sourceSize.width: Style.space(26)
-              sourceSize.height: Style.space(26)
+              sourceSize.width: Style.space(24)
+              sourceSize.height: Style.space(24)
               anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -133,10 +133,10 @@ Panel {
         Item {
           id: switcherRow
           anchors.top: headerRow.bottom
-          anchors.topMargin: Style.space(12)
+          anchors.topMargin: Style.space(10)
           anchors.left: parent.left
           anchors.right: parent.right
-          height: Style.space(32)
+          height: Style.space(30)
 
           Rectangle {
             anchors.left: parent.left
@@ -158,8 +158,8 @@ Panel {
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/gemini.svg")
-                sourceSize.width: Style.space(14)
-                sourceSize.height: Style.space(14)
+                sourceSize.width: Style.space(13)
+                sourceSize.height: Style.space(13)
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
@@ -193,8 +193,8 @@ Panel {
               spacing: Style.space(6)
               Image {
                 source: Qt.resolvedUrl("assets/claude.svg")
-                sourceSize.width: Style.space(14)
-                sourceSize.height: Style.space(14)
+                sourceSize.width: Style.space(13)
+                sourceSize.height: Style.space(13)
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
@@ -213,7 +213,7 @@ Panel {
         PanelSeparator {
           id: topSeparator
           anchors.top: switcherRow.bottom
-          anchors.topMargin: Style.space(12)
+          anchors.topMargin: Style.space(10)
           anchors.left: parent.left
           anchors.right: parent.right
           foreground: root.foreground
@@ -223,7 +223,7 @@ Panel {
         Text {
           id: limitsTitle
           anchors.top: topSeparator.bottom
-          anchors.topMargin: Style.space(12)
+          anchors.topMargin: Style.space(10)
           anchors.left: parent.left
           text: "RATE LIMITS & ALLOWANCES (" + (root.currentCategoryData.name || "ACTIVE").toUpperCase() + ")"
           color: root.dim
@@ -236,10 +236,10 @@ Panel {
         Item {
           id: sessionMeter
           anchors.top: limitsTitle.bottom
-          anchors.topMargin: Style.space(8)
+          anchors.topMargin: Style.space(6)
           anchors.left: parent.left
           anchors.right: parent.right
-          height: Style.space(42)
+          height: Style.space(40)
 
           Item {
             anchors.top: parent.top
@@ -280,10 +280,10 @@ Panel {
 
           Rectangle {
             anchors.top: parent.top
-            anchors.topMargin: Style.space(20)
+            anchors.topMargin: Style.space(18)
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Style.space(8)
+            height: Style.space(7)
             radius: Style.space(4)
             color: root.trackBg
 
@@ -297,7 +297,7 @@ Panel {
 
           Item {
             anchors.top: parent.top
-            anchors.topMargin: Style.space(30)
+            anchors.topMargin: Style.space(28)
             anchors.left: parent.left
             anchors.right: parent.right
             height: Style.space(12)
@@ -325,10 +325,10 @@ Panel {
         Item {
           id: weeklyMeter
           anchors.top: sessionMeter.bottom
-          anchors.topMargin: Style.space(8)
+          anchors.topMargin: Style.space(6)
           anchors.left: parent.left
           anchors.right: parent.right
-          height: Style.space(42)
+          height: Style.space(40)
 
           Item {
             anchors.top: parent.top
@@ -369,10 +369,10 @@ Panel {
 
           Rectangle {
             anchors.top: parent.top
-            anchors.topMargin: Style.space(20)
+            anchors.topMargin: Style.space(18)
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Style.space(8)
+            height: Style.space(7)
             radius: Style.space(4)
             color: root.trackBg
 
@@ -386,7 +386,7 @@ Panel {
 
           Item {
             anchors.top: parent.top
-            anchors.topMargin: Style.space(30)
+            anchors.topMargin: Style.space(28)
             anchors.left: parent.left
             anchors.right: parent.right
             height: Style.space(12)
@@ -415,7 +415,7 @@ Panel {
         PanelSeparator {
           id: midSeparator
           anchors.top: weeklyMeter.bottom
-          anchors.topMargin: Style.space(10)
+          anchors.topMargin: Style.space(8)
           anchors.left: parent.left
           anchors.right: parent.right
           foreground: root.foreground
@@ -425,7 +425,7 @@ Panel {
         Item {
           id: tokensHeaderRow
           anchors.top: midSeparator.bottom
-          anchors.topMargin: Style.space(10)
+          anchors.topMargin: Style.space(8)
           anchors.left: parent.left
           anchors.right: parent.right
           height: Style.space(16)
@@ -454,7 +454,7 @@ Panel {
         Column {
           id: modelsColumn
           anchors.top: tokensHeaderRow.bottom
-          anchors.topMargin: Style.space(6)
+          anchors.topMargin: Style.space(5)
           anchors.left: parent.left
           anchors.right: parent.right
           spacing: Style.space(4)
@@ -502,7 +502,7 @@ Panel {
         Item {
           id: jobHeaderRow
           anchors.top: modelsColumn.bottom
-          anchors.topMargin: Style.space(10)
+          anchors.topMargin: Style.space(8)
           anchors.left: parent.left
           anchors.right: parent.right
           height: Style.space(16)
@@ -554,17 +554,17 @@ Panel {
         Rectangle {
           id: jobCard
           anchors.top: jobHeaderRow.bottom
-          anchors.topMargin: Style.space(6)
+          anchors.topMargin: Style.space(5)
           anchors.left: parent.left
           anchors.right: parent.right
-          height: Style.space(52)
+          height: Style.space(48)
           color: Style.selectedFillFor(root.foreground, root.accent)
           radius: Style.space(6)
           visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
 
           Column {
             anchors.fill: parent
-            anchors.margins: Style.space(8)
+            anchors.margins: Style.space(7)
             spacing: Style.space(3)
 
             Text {
@@ -606,7 +606,7 @@ Panel {
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.bottom: footerRow.top
-          anchors.bottomMargin: Style.space(8)
+          anchors.bottomMargin: Style.space(6)
           foreground: root.foreground
         }
 
