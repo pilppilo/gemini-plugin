@@ -53,7 +53,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: keyboardPanel.fittedContentWidth(Style.space(380))
-    contentHeight: keyboardPanel.fittedContentHeight(Style.space(480), Style.space(480))
+    contentHeight: keyboardPanel.fittedContentHeight(Style.space(560), Style.space(560))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -454,7 +454,7 @@ Panel {
         Column {
           id: modelsColumn
           anchors.top: tokensHeaderRow.bottom
-          anchors.topMargin: Style.space(8)
+          anchors.topMargin: Style.space(6)
           anchors.left: parent.left
           anchors.right: parent.right
           spacing: Style.space(4)
@@ -466,7 +466,7 @@ Panel {
 
             delegate: Rectangle {
               width: modelsColumn.width
-              height: Style.space(28)
+              height: Style.space(26)
               color: Style.selectedFillFor(root.foreground, root.accent)
               radius: Style.space(4)
 
@@ -498,7 +498,109 @@ Panel {
           }
         }
 
-        // ------------------ 5. Bottom Footer / Status ------------------
+        // ------------------ 5. Recent Finished Job ------------------
+        Item {
+          id: jobHeaderRow
+          anchors.top: modelsColumn.bottom
+          anchors.topMargin: Style.space(10)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(16)
+          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
+
+          Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "RECENT FINISHED JOB"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(6)
+
+            Rectangle {
+              height: Style.space(15)
+              width: statusBadgeText.implicitWidth + Style.space(10)
+              color: Style.selectedFillFor(root.foreground, root.accent)
+              radius: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                id: statusBadgeText
+                anchors.centerIn: parent
+                text: "✓ " + (root.usage && root.usage.recentJob ? root.usage.recentJob.status : "Completed")
+                color: root.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption - 2
+                font.bold: true
+              }
+            }
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.usage && root.usage.recentJob ? root.usage.recentJob.timeAgo : ""
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption - 1
+            }
+          }
+        }
+
+        Rectangle {
+          id: jobCard
+          anchors.top: jobHeaderRow.bottom
+          anchors.topMargin: Style.space(6)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          height: Style.space(52)
+          color: Style.selectedFillFor(root.foreground, root.accent)
+          radius: Style.space(6)
+          visible: Boolean(root.usage && root.usage.recentJob && root.usage.recentJob.title)
+
+          Column {
+            anchors.fill: parent
+            anchors.margins: Style.space(8)
+            spacing: Style.space(3)
+
+            Text {
+              width: parent.width
+              text: root.usage && root.usage.recentJob ? root.usage.recentJob.title : ""
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              elide: Text.ElideRight
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Text {
+                text: "📁 " + (root.usage && root.usage.recentJob ? root.usage.recentJob.workspace : "~")
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption - 1
+              }
+
+              Item { width: Style.space(4); height: 1 }
+
+              Text {
+                text: root.usage && root.usage.recentJob ? (root.usage.recentJob.steps + " steps") : ""
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption - 1
+              }
+            }
+          }
+        }
+
+        // ------------------ 6. Bottom Footer / Status ------------------
         PanelSeparator {
           id: footerSeparator
           anchors.left: parent.left
