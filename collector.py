@@ -49,11 +49,11 @@ def get_category(model_name):
     return "claude_others"
 
 
-def build_conversation_model_map(paths, default_model):
+def build_conversation_timelines(paths):
     brain_dir = paths["antigravity_cli"] / "brain"
-    cid_map = {}
+    cid_timelines = {}
     if not brain_dir.exists():
-        return cid_map
+        return cid_timelines
 
     for d in brain_dir.iterdir():
         if not d.is_dir():
@@ -62,21 +62,49 @@ def build_conversation_model_map(paths, default_model):
         t_file = d / ".system_generated" / "logs" / "transcript.jsonl"
         if not t_file.exists():
             continue
+        intervals = []
         try:
-            last_model = None
             with open(t_file, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
+                    if not line.strip():
+                        continue
                     if "Model Selection" in line:
                         m = re.search(r"Model Selection\` from .*? to (.*?)\.\s*No need", line)
                         if not m:
                             m = re.search(r"Model Selection\` from .*? to ([A-Za-z0-9\s\.\(\)\-]+?)(?:\.\s|\n|$)", line)
                         if m:
-                            last_model = m.group(1).strip()
-            if last_model:
-                cid_map[cid] = last_model
+                            model_name = m.group(1).strip()
+                            try:
+                                step = json.loads(line)
+                                created = step.get("created_at")
+                                if created:
+                                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                                    intervals.append((dt.timestamp() * 1000, model_name))
+                                else:
+                                    intervals.append((0, model_name))
+                            except Exception:
+                                intervals.append((0, model_name))
         except Exception:
             pass
-    return cid_map
+
+        intervals.sort(key=lambda x: x[0])
+        if intervals:
+            cid_timelines[cid] = intervals
+
+    return cid_timelines
+
+
+def resolve_model_at_ts(cid_timelines, cid, ts, default_model):
+    intervals = cid_timelines.get(cid)
+    if not intervals:
+        return default_model
+    current = intervals[0][1]
+    for m_ts, m_name in intervals:
+        if ts >= m_ts:
+            current = m_name
+        else:
+            break
+    return current
 
 
 def init_category_bucket():
@@ -91,7 +119,10 @@ def init_category_bucket():
         "oldest_in_7d": None,
         "active_dates": set(),
         "recent_day_map": {},
-        "model_tokens": {},
+        "weekly_model_tokens": {},
+        "weekly_model_prompts": {},
+        "today_model_tokens": {},
+        "today_model_prompts": {},
         "models_seen": set()
     }
 
@@ -108,7 +139,7 @@ def parse_history_by_category(paths, allowances, default_model):
     today_str = now.strftime("%Y-%m-%d")
     recent_dates = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
 
-    cid_model_map = build_conversation_model_map(paths, default_model)
+    cid_timelines = build_conversation_timelines(paths)
 
     raw_buckets = {
         "gemini": init_category_bucket(),
@@ -128,7 +159,9 @@ def parse_history_by_category(paths, allowances, default_model):
                     try:
                         entry = json.loads(line)
                         cid = entry.get("conversationId")
-                        model = cid_model_map.get(cid) or default_model
+                        ts = entry.get("timestamp", 0)
+
+                        model = resolve_model_at_ts(cid_timelines, cid, ts, default_model)
                         cat = get_category(model)
                         b = raw_buckets[cat]
 
@@ -137,7 +170,6 @@ def parse_history_by_category(paths, allowances, default_model):
                         if cid:
                             b["total_sessions"].add(cid)
 
-                        ts = entry.get("timestamp", 0)
                         if ts <= 0:
                             continue
 
@@ -153,6 +185,10 @@ def parse_history_by_category(paths, allowances, default_model):
                             if b["oldest_in_7d"] is None or ts < b["oldest_in_7d"]:
                                 b["oldest_in_7d"] = ts
 
+                            # Accumulate weekly model tokens and prompt counts
+                            b["weekly_model_prompts"][model] = b["weekly_model_prompts"].get(model, 0) + 1
+                            b["weekly_model_tokens"][model] = b["weekly_model_tokens"].get(model, 0) + 2500
+
                         dt = datetime.fromtimestamp(ts / 1000.0) if ts > 1e11 else datetime.fromtimestamp(ts)
                         day_str = dt.strftime("%Y-%m-%d")
                         b["active_dates"].add(day_str)
@@ -164,7 +200,8 @@ def parse_history_by_category(paths, allowances, default_model):
                             b["today_prompts"] += 1
                             if cid:
                                 b["today_sessions"].add(cid)
-                            b["model_tokens"][model] = b["model_tokens"].get(model, 0) + 2500
+                            b["today_model_prompts"][model] = b["today_model_prompts"].get(model, 0) + 1
+                            b["today_model_tokens"][model] = b["today_model_tokens"].get(model, 0) + 2500
                     except Exception:
                         pass
         except Exception as e:
@@ -195,6 +232,8 @@ def parse_history_by_category(paths, allowances, default_model):
                             b["weekly_prompts"] += 1
                             if b["oldest_in_7d"] is None or ts < b["oldest_in_7d"]:
                                 b["oldest_in_7d"] = ts
+                            b["weekly_model_prompts"]["Claude Code"] = b["weekly_model_prompts"].get("Claude Code", 0) + 1
+                            b["weekly_model_tokens"]["Claude Code"] = b["weekly_model_tokens"].get("Claude Code", 0) + 2500
                         dt = datetime.fromtimestamp(ts / 1000.0) if ts > 1e11 else datetime.fromtimestamp(ts)
                         day_str = dt.strftime("%Y-%m-%d")
                         b["active_dates"].add(day_str)
@@ -202,7 +241,8 @@ def parse_history_by_category(paths, allowances, default_model):
                             b["recent_day_map"][day_str] += 1
                         if day_str == today_str:
                             b["today_prompts"] += 1
-                            b["model_tokens"]["Claude Code"] = b["model_tokens"].get("Claude Code", 0) + 2500
+                            b["today_model_prompts"]["Claude Code"] = b["today_model_prompts"].get("Claude Code", 0) + 1
+                            b["today_model_tokens"]["Claude Code"] = b["today_model_tokens"].get("Claude Code", 0) + 2500
                     except Exception:
                         pass
         except Exception:
@@ -255,21 +295,44 @@ def parse_history_by_category(paths, allowances, default_model):
             elapsed_week_ratio = 0.5
         behind_pace = (weekly_percent > (elapsed_week_ratio + 0.15)) and (b["weekly_prompts"] > 10)
 
-        today_tokens = sum(b["model_tokens"].values())
+        weekly_tokens = sum(b["weekly_model_tokens"].values())
+        today_tokens = sum(b["today_model_tokens"].values())
+        if weekly_tokens == 0 and b["weekly_prompts"] > 0:
+            weekly_tokens = b["weekly_prompts"] * 2500
         if today_tokens == 0 and b["today_prompts"] > 0:
             today_tokens = b["today_prompts"] * 2500
 
+        # Build model_usage_list across weekly models
         model_usage_list = []
-        for m, t in b["model_tokens"].items():
-            model_usage_list.append({"name": m, "tokens": t})
+        for m, t in b["weekly_model_tokens"].items():
+            model_usage_list.append({
+                "name": m,
+                "tokens": t,
+                "prompts": b["weekly_model_prompts"].get(m, 0),
+                "todayTokens": b["today_model_tokens"].get(m, 0),
+                "todayPrompts": b["today_model_prompts"].get(m, 0)
+            })
+
         if not model_usage_list and b["models_seen"]:
             top_m = list(b["models_seen"])[0]
-            model_usage_list.append({"name": top_m, "tokens": today_tokens})
+            model_usage_list.append({
+                "name": top_m,
+                "tokens": weekly_tokens,
+                "prompts": b["weekly_prompts"],
+                "todayTokens": today_tokens,
+                "todayPrompts": b["today_prompts"]
+            })
         elif not model_usage_list:
             default_label = "Gemini 3.8 Flash (High)" if cat_key == "gemini" else "Claude Opus 4.6 (Thinking)"
-            model_usage_list.append({"name": default_label, "tokens": today_tokens})
+            model_usage_list.append({
+                "name": default_label,
+                "tokens": weekly_tokens,
+                "prompts": b["weekly_prompts"],
+                "todayTokens": today_tokens,
+                "todayPrompts": b["today_prompts"]
+            })
 
-        # Sort heavier models first
+        # Sort heavier / most used models first
         model_usage_list.sort(key=lambda x: x["tokens"], reverse=True)
         active_cat_model = model_usage_list[0]["name"]
 
@@ -282,6 +345,8 @@ def parse_history_by_category(paths, allowances, default_model):
             "todayPrompts": b["today_prompts"],
             "todaySessions": len(b["today_sessions"]),
             "todayTotalTokens": today_tokens,
+            "weeklyPrompts": b["weekly_prompts"],
+            "weeklyTotalTokens": weekly_tokens,
             "totalPrompts": b["total_prompts"],
             "totalSessions": len(b["total_sessions"]),
             "activeDays": len(b["active_dates"]),
@@ -672,6 +737,8 @@ def main():
         "todayPrompts": active_cat_data["todayPrompts"],
         "todaySessions": active_cat_data["todaySessions"],
         "todayTotalTokens": active_cat_data["todayTotalTokens"],
+        "weeklyPrompts": active_cat_data["weeklyPrompts"],
+        "weeklyTotalTokens": active_cat_data["weeklyTotalTokens"],
         "totalPrompts": active_cat_data["totalPrompts"],
         "totalSessions": active_cat_data["totalSessions"],
         "activeDays": active_cat_data["activeDays"],
